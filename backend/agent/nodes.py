@@ -1,12 +1,14 @@
 from agent.state import AgentState
 from langchain_google_genai import ChatGoogleGenerativeAI
+from dotenv import load_dotenv
+load_dotenv() 
 
-model = ChatGoogleGenerativeAI(model="gemini-3.5-flash", thinking_level="off")
+model = ChatGoogleGenerativeAI(model="gemini-3.5-flash", thinking_level="low")
 
 def classify_intent(state: AgentState)-> AgentState:
     """Classify the user's input into a category."""
     
-    valid_intents = ["flight", "hotel", "weather", "general"]
+    valid_intents = ["transportation", "hotel", "weather", "general"]
 
     prompt = f"""
     Classify the following user question into one of these categories:
