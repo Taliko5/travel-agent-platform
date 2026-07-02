@@ -28,8 +28,8 @@ def root():
     
     
 @app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest):
-    result = graph.invoke({
+async def chat(request: ChatRequest):
+    result = await graph.ainvoke({
         "user_input": request.message,
         "intent":None,
         "response":None,
