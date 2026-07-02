@@ -7,6 +7,7 @@ load_dotenv()
 initial_state: AgentState = {
     "user_input": "show me the possible route from tokyo to NY",
     "intent": None,
+    "context": None,
     "response": None,
 }
 graph = build_graph()

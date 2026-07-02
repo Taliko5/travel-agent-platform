@@ -89,13 +89,13 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Create a .env file with:
-# GOOGLE_API_KEY=your_key_here
+### Create a .env file with:
+### GOOGLE_API_KEY=your_key_here
 
-# Ingest travel data into the vector store (run once)
+## Ingest travel data into the vector store (run once)
 python rag/ingest.py
 
-# Start the API server
+## Start the API server
 uvicorn api.main:app --reload --port 8000
 \```
 
