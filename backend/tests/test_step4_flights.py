@@ -220,12 +220,12 @@ class TestRouteByIntentFlights:
         state = self._state("weather", "What is the weather in Tokyo?")
         assert route_by_intent(state) == "call_weather_tool"
 
-    def test_hotel_routes_to_retrieve_context(self):
-        """Hotel intent still falls through to retrieve_context (hotel tool not yet wired)."""
+    def test_hotel_routes_to_call_hotel_tool(self):
+        """Hotel intent routes to call_hotel_tool (wired in 4.20)."""
         from agent.graph import route_by_intent
 
         state = self._state("hotel", "Best hotels in Fukuoka?")
-        assert route_by_intent(state) == "retrieve_context"
+        assert route_by_intent(state) == "call_hotel_tool"
 
     def test_general_routes_to_retrieve_context(self):
         """General intent always uses RAG."""

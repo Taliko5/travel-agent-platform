@@ -218,13 +218,13 @@ class TestRouteByIntent:
                  "weather_data": None, "response": None}
         assert route_by_intent(state) == "call_weather_tool"
 
-    def test_hotel_intent_routes_to_retrieve_context(self):
-        """route_by_intent returns 'retrieve_context' for hotel intent."""
+    def test_hotel_intent_routes_to_call_hotel_tool(self):
+        """route_by_intent returns 'call_hotel_tool' for hotel intent."""
         from agent.graph import route_by_intent
 
         state = {"intent": "hotel", "user_input": "", "context": None,
                  "weather_data": None, "response": None}
-        assert route_by_intent(state) == "retrieve_context"
+        assert route_by_intent(state) == "call_hotel_tool"
 
     def test_transportation_intent_routes_to_retrieve_context(self):
         """route_by_intent returns 'retrieve_context' for transportation intent (pre-4b)."""

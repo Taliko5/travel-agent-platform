@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from rag.retriever import retrieve_context
 from mcp_servers.weather_server import get_weather
 from mcp_servers.flight_server import search_flights
+from mcp_servers.hotel_server import search_hotels
 
 load_dotenv()
 
@@ -67,6 +68,15 @@ async def call_flight_tool(state: AgentState) -> AgentState:
     }
 
 
+async def call_hotel_tool(state: AgentState) -> AgentState:
+    """Call the mock hotel search tool."""
+    hotels = await search_hotels(query=state["user_input"])
+    return {
+        **state,
+        "hotel_data": hotels,
+    }
+
+
 def generate_response(state: AgentState) -> AgentState:
     """Generate a response based on the classified intent and user's question."""
 
@@ -82,11 +92,16 @@ def generate_response(state: AgentState) -> AgentState:
     if state.get("flight_data"):
         flight_section = f"\nFlight search results:\n{state['flight_data']}\n"
 
+    hotel_section = ""
+    if state.get("hotel_data"):
+        hotel_section = f"\nHotel search results:\n{state['hotel_data']}\n"
+
     prompt = f"""
     intent: {state["intent"]}
     {context_section}
     {weather_section}
     {flight_section}
+    {hotel_section}
     question: {state["user_input"]}
     Respond with about 200 words. Include URLs if relevant.
     """

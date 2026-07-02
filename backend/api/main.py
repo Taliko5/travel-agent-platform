@@ -35,6 +35,7 @@ async def chat(request: ChatRequest):
         "response":None,
         "flight_data": None,
         "weather_data": None,
+        "hotel_data":None,
     })
     return ChatResponse(
         intent=result["intent"],

@@ -6,5 +6,6 @@ class AgentState(TypedDict):
     context: Optional[str]
     weather_data: Optional[str]
     flight_data: Optional[str]
+    hotel_data: Optional[str]
     response: Optional[str]
     
