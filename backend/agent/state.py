@@ -5,5 +5,6 @@ class AgentState(TypedDict):
     intent: Optional[str]
     context: Optional[str]
     weather_data: Optional[str]
+    flight_data: Optional[str]
     response: Optional[str]
     

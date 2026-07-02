@@ -3,6 +3,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
 from rag.retriever import retrieve_context
 from mcp_servers.weather_server import get_weather
+from mcp_servers.flight_server import search_flights
 
 load_dotenv()
 
@@ -57,6 +58,15 @@ async def call_weather_tool(state: AgentState) -> AgentState:
     }
 
 
+async def call_flight_tool(state: AgentState) -> AgentState:
+    """Call the mock flight search tool."""
+    flights = await search_flights(query=state["user_input"])
+    return {
+        **state,
+        "flight_data": flights,
+    }
+
+
 def generate_response(state: AgentState) -> AgentState:
     """Generate a response based on the classified intent and user's question."""
 
@@ -68,10 +78,15 @@ def generate_response(state: AgentState) -> AgentState:
     if state.get("weather_data"):
         weather_section = f"\nLive weather data:\n{state['weather_data']}\n"
 
+    flight_section = ""
+    if state.get("flight_data"):
+        flight_section = f"\nFlight search results:\n{state['flight_data']}\n"
+
     prompt = f"""
     intent: {state["intent"]}
     {context_section}
     {weather_section}
+    {flight_section}
     question: {state["user_input"]}
     Respond with about 200 words. Include URLs if relevant.
     """
