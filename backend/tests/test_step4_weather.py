@@ -137,10 +137,10 @@ class TestCallWeatherToolNode:
         mock_llm_response = MagicMock()
         mock_llm_response.text = "Riga"
 
-        with patch("agent.nodes.model") as mock_model, \
+        with patch("agent.nodes.get_model") as mock_get_model, \
              patch("agent.nodes.get_weather", new_callable=AsyncMock) as mock_get_weather:
 
-            mock_model.invoke.return_value = mock_llm_response
+            mock_get_model.return_value.invoke.return_value = mock_llm_response
             mock_get_weather.return_value = "Current weather in Riga: 18.0°C"
 
             result = await call_weather_tool(state)
@@ -163,10 +163,10 @@ class TestCallWeatherToolNode:
         mock_llm_response = MagicMock()
         mock_llm_response.text = "Fukuoka"
 
-        with patch("agent.nodes.model") as mock_model, \
+        with patch("agent.nodes.get_model") as mock_get_model, \
              patch("agent.nodes.get_weather", new_callable=AsyncMock) as mock_get_weather:
 
-            mock_model.invoke.return_value = mock_llm_response
+            mock_get_model.return_value.invoke.return_value = mock_llm_response
             mock_get_weather.return_value = "Current weather in Fukuoka: 21.0°C"
 
             result = await call_weather_tool(state)
@@ -191,10 +191,10 @@ class TestCallWeatherToolNode:
         mock_llm_response = MagicMock()
         mock_llm_response.text = "Abu Dhabi"
 
-        with patch("agent.nodes.model") as mock_model, \
+        with patch("agent.nodes.get_model") as mock_get_model, \
              patch("agent.nodes.get_weather", new_callable=AsyncMock) as mock_get_weather:
 
-            mock_model.invoke.return_value = mock_llm_response
+            mock_get_model.return_value.invoke.return_value = mock_llm_response
             mock_get_weather.return_value = "Current weather in Abu Dhabi: 38.0°C"
 
             await call_weather_tool(state)

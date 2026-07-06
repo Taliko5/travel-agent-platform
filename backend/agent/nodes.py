@@ -1,3 +1,4 @@
+from functools import lru_cache
 from agent.state import AgentState
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
@@ -8,7 +9,9 @@ from mcp_servers.hotel_server import search_hotels
 
 load_dotenv()
 
-model = ChatGoogleGenerativeAI(model="gemini-3.5-flash", thinking_level="low")
+@lru_cache(maxsize=1)
+def get_model():
+    return ChatGoogleGenerativeAI(model="gemini-3.5-flash", thinking_level="low")
 
 def classify_intent(state: AgentState)-> AgentState:
     """Classify the user's input into a category."""
@@ -25,7 +28,7 @@ def classify_intent(state: AgentState)-> AgentState:
     Respond with only the category name, one word, lowercase.
     """
     
-    response = model.invoke(prompt)
+    response = get_model().invoke(prompt)
     raw_intent = response.text.strip().lower()
     intent = next(
         (valid for valid in valid_intents if valid in raw_intent),
@@ -48,7 +51,7 @@ def retrieve_context_node(state: AgentState) -> AgentState:
 
 async def call_weather_tool(state: AgentState) -> AgentState:
     """Extract city name from user input, then fetch live weather."""
-    extraction = model.invoke(
+    extraction = get_model().invoke(
         f"Extract only the city name from this question. Reply with the city name only, nothing else.\n\nQuestion: {state['user_input']}"
     )
     city = extraction.text.strip()
@@ -106,7 +109,7 @@ def generate_response(state: AgentState) -> AgentState:
     Respond with about 200 words. Include URLs if relevant.
     """
 
-    response = model.invoke(prompt)
+    response = get_model().invoke(prompt)
 
     return {
         **state,
