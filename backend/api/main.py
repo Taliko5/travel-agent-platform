@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 load_dotenv()
 
-from agent.graph import build_graph
+from agent.graph import build_graph # noqa: E402
 
 
 app = FastAPI(title="travel agent API", version="0.1.0")

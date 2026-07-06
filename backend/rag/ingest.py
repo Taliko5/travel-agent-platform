@@ -1,10 +1,10 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-import os
-from langchain_core.documents import Document
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_chroma import Chroma
+import os # noqa: E402
+from langchain_core.documents import Document # noqa: E402
+from langchain_google_genai import GoogleGenerativeAIEmbeddings # noqa: E402
+from langchain_chroma import Chroma # noqa: E402
 
 DATA_DIR = "rag/data"
 CHROMA_DIR = "rag/chroma_db"
@@ -28,7 +28,7 @@ def main():
 
     embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
     
-    vectorstore = Chroma.from_documents(
+    Chroma.from_documents(
         documents=documents,
         embedding=embeddings,
         persist_directory=CHROMA_DIR
