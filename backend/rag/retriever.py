@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_chroma import Chroma
+from langchain_google_genai import GoogleGenerativeAIEmbeddings # noqa: E402
+from langchain_chroma import Chroma # noqa: E402
 
 CHROMA_DIR = "rag/chroma_db"
 
