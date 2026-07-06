@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: travel-agent-backend
+  labels:
+    app: travel-agent-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: travel-agent-backend
+  template:
+    metadata:
+      labels:
+        app: travel-agent-backend
+    spec:
+      containers:
+        - name: backend
+          image: travel-agent-backend:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: travel-agent-secrets
+                  key: google-api-key
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30

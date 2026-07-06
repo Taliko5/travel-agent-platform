@@ -98,6 +98,9 @@ The tool runs in a separate process — it can be reused by Claude Desktop, Clau
 - `backend/Dockerfile`
 - `docker-compose.yaml` (already exists as placeholder — fill in)
 
+**Architectural decision — ChromaDB:**
+Step 5 uses ChromaDB in **embedded mode** with a named Docker volume. This is intentional: change one variable at a time (containerise first, separate services later). In Step 8 (K8s/AWS), ChromaDB will be migrated to **server mode** (standalone StatefulSet + PersistentVolume) because multiple backend pods cannot share a named volume. Only `rag/retriever.py`'s client initialisation changes — the rest of the codebase is unaffected.
+
 **Approach:**
 ```dockerfile
 FROM python:3.13-slim
