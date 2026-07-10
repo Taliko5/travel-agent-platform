@@ -1,109 +1,89 @@
 # Travel Agent Platform
 
-AI-powered travel planning agent built with production-ready infrastructure.
+AI-powered travel planning agent with production-ready infrastructure.
 
-## Tech Stack
+## Stack
 
-### Backend
-- Python / FastAPI
-- LangGraph (AI Agent)
-- RAG (Retrieval Augmented Generation)
-- MCP Server
+- **Backend:** Python, FastAPI, LangGraph, ChromaDB
+- **LLM:** Google Gemini (`gemini-3.5-flash`, `gemini-embedding-001`)
+- **Tools:** MCP servers — weather (live Open-Meteo), flights (mock), hotels (mock)
+- **Infra:** Docker, Kubernetes, GitHub Actions
 
-### Frontend
-- Next.js 14 / TypeScript
+## Quick Start
 
-### Infrastructure
-- Docker / Kubernetes
-- AWS ECS / EKS
-- GitHub Actions CI/CD
-- Grafana / Prometheus / OpenTelemetry
-
-## Architecture
-
-(後で図を追加)
-
-## Getting Started
-
-### Prerequisites
-- Python 3.13+
-- Node.js 18+
-- Docker
-
-### Backend
-
-\```bash
+```bash
 cd backend
-python -m venv venv
-source venv/bin/activate
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+python rag/ingest.py                              # one-time: load travel guides into ChromaDB
 uvicorn api.main:app --reload --port 8000
-\```
+```
+
+Set `GOOGLE_API_KEY` in `backend/.env` before running.
 
 ## Project Structure
 
-\```
+```
 backend/
 ├── agent/
-│   ├── state.py       # AgentState definition (TypedDict)
-│   ├── nodes.py        # classify_intent, generate_response
-│   └── graph.py        # LangGraph workflow assembly
+│   ├── state.py            # AgentState TypedDict
+│   ├── nodes.py            # classify_intent, call_*_tool, generate_response
+│   └── graph.py            # LangGraph workflow + intent routing
 ├── api/
-│   └── main.py         # FastAPI app (/health, /chat)
+│   └── main.py             # FastAPI: GET /health, POST /chat
+├── mcp_servers/
+│   ├── weather_server.py   # live weather via Open-Meteo
+│   ├── flight_server.py    # mock flight data
+│   └── hotel_server.py     # mock hotel data
 ├── rag/
-│   ├── data/            # Travel guide source documents (.txt)
-│   ├── ingest.py        # Embeds documents and stores them in ChromaDB
-│   ├── retriever.py     # Semantic search over the vector store
-│   └── chroma_db/        # Persisted vector store (gitignored)
-└── venv/
-\```
+│   ├── data/               # travel guide .txt source files
+│   ├── ingest.py           # embed + persist to ChromaDB (run once)
+│   └── retriever.py        # similarity search
+└── tests/
+    ├── test_step4_flights.py
+    ├── test_step4_hotels.py
+    └── test_step4_weather.py
 
-## Features Implemented
+frontend/                         # Step 6 — see openspec/changes/add-chat-frontend
+└── src/app/
+    ├── page.tsx                  # renders <ChatInterface />
+    ├── providers.tsx             # "use client" ChakraProvider wrapper
+    └── components/
+        ├── ChatInterface.tsx     # orchestrator: state + POST /chat fetch
+        ├── SparkleHeader.tsx     # decorative accents (no state)
+        ├── MessageList.tsx       # maps messages[] → MessageBubble
+        ├── MessageBubble.tsx     # single message + conditional intent label
+        └── ChatInput.tsx         # input + star send button
+```
 
-### Agent (LangGraph)
-- Intent classification node using Gemini (`gemini-3.5-flash`)
-- Response generation node
-- Stateful graph execution via `StateGraph`
+Frontend components are split one-per-concern (rather than a single `ChatInterface.tsx`) so a future change — e.g. favoriting a message, or a custom loading indicator — touches one component instead of a file that also owns fetch/state logic.
 
-### API (FastAPI)
-- `GET /health` - health check endpoint
-- `POST /chat` - accepts a user message, returns classified intent + generated response
+## API
 
-### RAG (Retrieval Augmented Generation)
-- Travel guide documents embedded using `gemini-embedding-001`
-- Vector storage via ChromaDB (persisted locally)
-- Semantic search retrieves relevant travel context based on user queries (not keyword-based)
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | `{"status": "ok"}` |
+| `/chat` | POST | `{"message": "..."}` → `{"intent": "...", "response": "..."}` |
 
-## Tech Stack
-- **Backend**: Python, FastAPI
-- **Agent Framework**: LangGraph, LangChain
-- **LLM**: Google Gemini (`gemini-3.5-flash`)
-- **Embeddings**: Google Gemini (`gemini-embedding-001`)
-- **Vector Store**: ChromaDB
+## Documentation Map
 
-## Setup
+This repo has three separate `.md` systems that serve different purposes — don't confuse them:
 
-\```bash
-cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+| Location | Purpose | Audience | Lifecycle |
+|---|---|---|---|
+| **`CLAUDE.md`** | Persistent project instructions for Claude Code (commands, architecture, key files, coding patterns) | AI agent (Claude Code) | Long-lived, updated as conventions change |
+| **`docs/`** | Human-facing narrative docs — step-by-step build roadmap (`plan.md`) and per-step writeups (`step4.md`–`step7.md`) covering MCP servers, Docker/k8s, frontend, CI/CD | Developers/humans reading how the project was built | Historical record, mostly append-only |
+| **`openspec/`** | Spec-driven change management — `changes/` holds in-flight proposals (`proposal.md`, `design.md`, `tasks.md`, `specs/*/spec.md`) before they're archived, `specs/` holds the current source-of-truth specs | AI + humans collaborating on *new* features via the OpenSpec workflow | Working directory — changes move from `changes/` to `specs/` on archive |
 
-### Create a .env file with:
-### GOOGLE_API_KEY=your_key_here
-
-## Ingest travel data into the vector store (run once)
-python rag/ingest.py
-
-## Start the API server
-uvicorn api.main:app --reload --port 8000
-\```
+In short: `CLAUDE.md` tells the agent how to work in the repo *right now*, `docs/` explains what was built and why (past tense), and `openspec/` is the active workflow for proposing and tracking *upcoming* changes.
 
 ## Roadmap
-- [x] Step 1-2: LangGraph agent (intent classification + response generation)
-- [x] Step 3: RAG implementation
-- [ ] Step 4: Custom MCP servers (flight/hotel/weather tools)
-- [ ] Step 5: Dockerization
-- [ ] Step 6: CI/CD with GitHub Actions
-- [ ] Step 7: Observability (Grafana, Prometheus, OpenTelemetry)
-- [ ] Step 8: AWS deployment (ECS / EKS)
+
+- [x] Steps 1–2: LangGraph agent (intent classification + response generation)
+- [x] Step 3: RAG with ChromaDB
+- [x] Step 4: MCP servers (weather / flights / hotels)
+- [x] Step 5: Docker + docker-compose + k8s manifests
+- [ ] Step 6: Frontend (Next.js 14 / TypeScript)
+- [ ] Step 7: GitHub Actions CI/CD
+- [ ] Step 8: Observability (Grafana, Prometheus, OpenTelemetry)
+- [ ] Step 9: AWS deployment (ECS / EKS)
