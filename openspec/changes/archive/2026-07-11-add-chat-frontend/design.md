@@ -129,6 +129,16 @@ Client-side fetch only — the chat call is user-triggered, not server-rendered,
 
 ---
 
+## Addendum: backend CORS (discovered during implementation)
+
+`backend/api/main.py` had no `CORSMiddleware`. This wasn't caught by the proposal's file scope (frontend-only) because `curl` against `/chat` works fine without it — only a real browser enforces the preflight `OPTIONS` check. Without it, the browser silently blocks every `fetch` from `localhost:3000`, so the Definition of Done ("chat sends to `POST /chat` and displays intent + response") was unreachable as originally scoped.
+
+**Decision:** added `CORSMiddleware` to `backend/api/main.py`, `allow_origins=["http://localhost:3000"]`. Confirmed via user check-in before touching a file outside the declared scope. Verified preflight `OPTIONS /chat` returns `access-control-allow-origin: http://localhost:3000` and the actual `POST` response carries the same header.
+
 ## Docker
 
 Single-stage `node:20-alpine` build (`npm ci` → `npm run build` → `npm start`), matching the original step6.md plan — multi-stage isn't justified at this scale. `docker-compose.yaml` gets a `frontend` service with `depends_on: backend` (soft dependency — the frontend is a static SPA once built, so this only affects startup order, not runtime behavior).
+
+## Addendum: Node 20 → 24 (post-implementation)
+
+Bumped from `node:20-alpine` to `node:24-alpine` (latest LTS) — no code changes required, `npm run build`/`npm run dev` verified clean under Node 24.18.0. Added `frontend/.nvmrc` (`24`) and `"engines": { "node": ">=24" }` in `package.json` so the version is discoverable/enforceable, not just documented in prose. `README.md` updated accordingly.

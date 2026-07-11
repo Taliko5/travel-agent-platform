@@ -1,0 +1,24 @@
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  background: linear-gradient(
+    135deg,
+    var(--chakra-colors-unicorn-pink-50, #fff5f8),
+    var(--chakra-colors-unicorn-lavender-50, #f7f4ff),
+    var(--chakra-colors-unicorn-mint-50, #f2fffb)
+  );
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

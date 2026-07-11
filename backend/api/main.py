@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 load_dotenv()
@@ -7,6 +8,12 @@ from agent.graph import build_graph # noqa: E402
 
 
 app = FastAPI(title="travel agent API", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 graph = build_graph()
 
 class ChatRequest(BaseModel):

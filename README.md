@@ -9,17 +9,43 @@ AI-powered travel planning agent with production-ready infrastructure.
 - **Tools:** MCP servers — weather (live Open-Meteo), flights (mock), hotels (mock)
 - **Infra:** Docker, Kubernetes, GitHub Actions
 
-## Quick Start
+## Running Locally
+
+### 1. Backend (localhost:8000)
 
 ```bash
 cd backend
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env                              # then set GOOGLE_API_KEY inside
 python rag/ingest.py                              # one-time: load travel guides into ChromaDB
 uvicorn api.main:app --reload --port 8000
 ```
 
-Set `GOOGLE_API_KEY` in `backend/.env` before running.
+Verify with `curl http://localhost:8000/health`.
+
+### 2. Frontend (localhost:3000)
+
+Requires **Node 24** (latest LTS). Check with `node -v`; if you're on an older system Node, use `nvm install 24 && nvm use 24` (a `.nvmrc` is included, so plain `nvm use` also works from `frontend/`).
+
+```bash
+cd frontend
+nvm use                                            # picks up Node 24 via .nvmrc
+cp .env.local.example .env.local                  # defaults to http://localhost:8000
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000` — the backend must already be running for chat to work.
+
+### Full stack via Docker (alternative to steps 1–2)
+
+```bash
+docker-compose up --build
+docker-compose exec backend python rag/ingest.py   # first-time ingest
+```
+
+Starts both services together: backend on `:8000`, frontend on `:3000`. Requires `GOOGLE_API_KEY` set in `backend/.env` beforehand (docker-compose reads it via `env_file`). Stop with `docker-compose down`.
 
 ## Project Structure
 
@@ -44,7 +70,7 @@ backend/
     ├── test_step4_hotels.py
     └── test_step4_weather.py
 
-frontend/                         # Step 6 — see openspec/changes/add-chat-frontend
+frontend/                         # see openspec/changes/add-chat-frontend
 └── src/app/
     ├── page.tsx                  # renders <ChatInterface />
     ├── providers.tsx             # "use client" ChakraProvider wrapper
@@ -83,7 +109,7 @@ In short: `CLAUDE.md` tells the agent how to work in the repo *right now*, `docs
 - [x] Step 3: RAG with ChromaDB
 - [x] Step 4: MCP servers (weather / flights / hotels)
 - [x] Step 5: Docker + docker-compose + k8s manifests
-- [ ] Step 6: Frontend (Next.js 14 / TypeScript)
+- [x] Step 6: Frontend (Next.js 14 / TypeScript)
 - [ ] Step 7: GitHub Actions CI/CD
 - [ ] Step 8: Observability (Grafana, Prometheus, OpenTelemetry)
 - [ ] Step 9: AWS deployment (ECS / EKS)

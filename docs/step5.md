@@ -54,13 +54,13 @@ Key notes:
 - [x] 5.2 Create `backend/Dockerfile`
 - [x] 5.3 Smoke test: `docker build -f backend/Dockerfile backend/` exits 0
 - [x] 5.4 Fill in `docker-compose.yaml`
-- [ ] 5.5 Smoke test: `docker-compose up --build` starts cleanly
-- [ ] 5.6 Verify `/health` and `/chat` respond inside container
+- [x] 5.5 Smoke test: `docker-compose up --build` starts cleanly
+- [x] 5.6 Verify `/health` and `/chat` respond inside container
 - [x] 5.7 Create `Infrastructure/k8s/backend-deployment.yaml`
 - [x] 5.8 Create `Infrastructure/k8s/backend-service.yaml`
-- [ ] 5.9 Validate manifests: `kubectl apply --dry-run=client -f Infrastructure/k8s/`
-- [ ] 5.10 Create `backend/.env.example`
-- [ ] 5.11 Update `docs/plan.md` Step 5 to Done
+- [x] 5.9 Validate manifests: `kubectl apply --dry-run=client -f Infrastructure/k8s/`
+- [x] 5.10 Create `backend/.env.example`
+- [x] 5.11 Update `docs/plan.md` Step 5 to Done
 
 ## Common Commands
 
