@@ -22,6 +22,40 @@ Two jobs:
 - `test` — checkout → Python 3.13 → pip cache → install deps → `ruff check backend/` → `pytest backend/tests/ -v`
 - `build` — checkout → Docker Buildx → `docker build` with GHA layer cache (`push: false`)
 
+### Gap: no frontend job
+
+`frontend/` (Step 6) has `npm run lint` and `npm run build` scripts but neither runs in CI — a broken build or lint error on the frontend can merge to `main` undetected. Proposed third job, independent of `test`/`build` (no `needs:`, so it runs in parallel):
+
+```yaml
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+```
+
+Not yet applied to `.github/workflows/ci.yml` — pending confirmation.
+
 ### Step 9 extension (ECR push)
 
 When Step 9 adds ECR push, append a third `push` job to the same `ci.yml` — `test` and `build` are unchanged:
