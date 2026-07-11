@@ -73,11 +73,16 @@ backend/
     └── test_step4_weather.py
 
 frontend/
-├── src/app/
-│   ├── page.tsx            root page
-│   └── components/
-│       └── ChatInterface.tsx  chat input + message display
-└── Dockerfile
+├── src/theme/index.ts      extendTheme(): unicorn color scales, chatRadius, fonts
+└── src/app/
+    ├── page.tsx            renders <ChatInterface />
+    ├── providers.tsx       "use client" ChakraProvider wrapper
+    └── components/
+        ├── ChatInterface.tsx  orchestrator: state + POST /chat fetch, composes below
+        ├── SparkleHeader.tsx  decorative accents (no state)
+        ├── MessageList.tsx    maps messages[] → MessageBubble
+        ├── MessageBubble.tsx  single message + conditional intent label
+        └── ChatInput.tsx      input + star send button
 ```
 
 ## Patterns to Know

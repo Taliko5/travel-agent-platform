@@ -1,5 +1,7 @@
 # Step 6: Frontend (Next.js 14 / TypeScript)
 
+> **Note:** the single-file `ChatInterface.tsx` plan below was superseded during implementation — see `openspec/changes/add-chat-frontend/design.md` for the actual split-component design (`ChatInterface`, `MessageBubble`, `MessageList`, `ChatInput`, `SparkleHeader`) and the Chakra UI theming decision. File Structure/Specs sections here are kept for history, not as the current source of truth.
+
 ## Goal
 
 Build a chat UI that connects to the FastAPI backend. Users type a travel question, see the classified intent and AI-generated response.
@@ -105,22 +107,22 @@ Behaviour:
 
 ## Tasks
 
-- [ ] 6.1 Init Next.js 14 TypeScript project: `npx create-next-app@14 frontend --typescript --app --no-tailwind --no-eslint`
-- [ ] 6.2 Create `src/app/components/ChatInterface.tsx`
-- [ ] 6.3 Update `src/app/page.tsx` to render `ChatInterface`
-- [ ] 6.4 Create `frontend/.env.local.example`
-- [ ] 6.5 Copy `.env.local.example` to `.env.local`, set `NEXT_PUBLIC_API_URL=http://localhost:8000`
-- [ ] 6.6 Test locally: `npm run dev` at `localhost:3000`, chat with backend running
-- [ ] 6.7 Create `frontend/Dockerfile`
-- [ ] 6.8 Add frontend service to `docker-compose.yaml`
-- [ ] 6.9 Test: `docker-compose up --build`, both services start, chat works at `localhost:3000`
-- [ ] 6.10 Update `docs/plan.md` Step 6 to Done
+- [x] 6.1 Init Next.js 14 TypeScript project: `npx create-next-app@14 frontend --typescript --app --no-tailwind --no-eslint`
+- [x] 6.2 Create `src/app/components/ChatInterface.tsx` (split into `ChatInterface` + `MessageBubble` + `MessageList` + `ChatInput` + `SparkleHeader` — see note above)
+- [x] 6.3 Update `src/app/page.tsx` to render `ChatInterface`
+- [x] 6.4 Create `frontend/.env.local.example`
+- [x] 6.5 Copy `.env.local.example` to `.env.local`, set `NEXT_PUBLIC_API_URL=http://localhost:8000`
+- [x] 6.6 Test locally: `npm run dev` at `localhost:3000`, chat with backend running
+- [x] 6.7 Create `frontend/Dockerfile`
+- [x] 6.8 Add frontend service to `docker-compose.yaml`
+- [x] 6.9 Test: `docker-compose up --build`, both services start, chat works at `localhost:3000`
+- [x] 6.10 Update `docs/plan.md` Step 6 to Done
 
 ## Definition of Done
 
-- [ ] `npm run dev` starts at `localhost:3000`
-- [ ] Chat sends to `POST /chat` and displays intent + response
-- [ ] `docker-compose up --build` starts frontend and backend
-- [ ] Chat works end-to-end through docker-compose
-- [ ] `frontend/Dockerfile` builds without errors
-- [ ] `.env.local.example` committed; real `.env.local` is not
+- [x] `npm run dev` starts at `localhost:3000`
+- [x] Chat sends to `POST /chat` and displays intent + response
+- [x] `docker-compose up --build` starts frontend and backend
+- [x] Chat works end-to-end through docker-compose
+- [x] `frontend/Dockerfile` builds without errors
+- [x] `.env.local.example` committed; real `.env.local` is not

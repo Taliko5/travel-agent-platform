@@ -9,8 +9,8 @@
 | 3b | RAG: Wire retriever into agent graph | Done |
 | 4 | MCP servers — weather, flights, hotels | Done |
 | 5 | Docker + docker-compose + k8s manifests | Done |
-| 6 | Frontend — Next.js 14 / TypeScript | Next |
-| 7 | GitHub Actions CI/CD | Planned |
+| 6 | Frontend — Next.js 14 / TypeScript | Done |
+| 7 | GitHub Actions CI/CD | Next |
 | 8 | Observability (Grafana, Prometheus, OpenTelemetry) | Planned |
 | 9 | AWS deployment (ECS / EKS) | Planned |
 
@@ -63,9 +63,15 @@ Built: `backend/Dockerfile`, `.dockerignore`, `docker-compose.yaml`, `backend/.e
 
 ## Step 6: Frontend
 
-See `docs/step6.md`.
+See `docs/step6.md` and `openspec/changes/add-chat-frontend/`.
 
-Goal: chat UI in Next.js 14 / TypeScript connecting to `POST /chat`. Shows intent and AI response. Containerized and added to docker-compose.
+Built: Next.js 14 (App Router, TypeScript) chat UI, Chakra UI pastel "unicorn" theme. `frontend/src/app/components/` split into `ChatInterface.tsx` (state + `POST /chat` fetch), `MessageList.tsx`, `MessageBubble.tsx`, `ChatInput.tsx` (star send button), `SparkleHeader.tsx` — one component per concern so each can be swapped independently later. Containerized (`frontend/Dockerfile`) and added to `docker-compose.yaml`.
+
+Also required adding `CORSMiddleware` to `backend/api/main.py` (`allow_origins=["http://localhost:3000"]`) — discovered during smoke testing that the backend had none, which silently blocked every browser `fetch` despite `curl` working fine.
+
+Verified: `npm run dev` + local backend, and full `docker-compose up --build` — both confirmed intent + response round-trip end-to-end.
+
+**UI polish** (`openspec/changes/improve-chat-ui/`): assistant responses now render as real markdown (`react-markdown` + `remark-gfm`, headings/bold/lists) instead of literal `#`/`**` characters via `MessageBubble.tsx`. New `ThinkingIndicator.tsx` shows a three-dot bounce + "...thinking" bubble in the message list while a request is in flight. `ChatInterface.tsx`'s outer panel now has a visible border/shadow card treatment, and the page background (`globals.css`) carries the unicorn pastel gradient that was previously accent-only. Also bumped frontend Node runtime 20 → 24 (latest LTS): `frontend/.nvmrc`, `package.json` `engines`, and `Dockerfile` base image all updated; `tsc`/`build`/`dev` verified clean under Node 24.18.0.
 
 ---
 
