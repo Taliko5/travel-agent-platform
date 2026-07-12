@@ -93,6 +93,10 @@ Built: `dorny/paths-filter` job-level path filtering (backend-only and frontend-
 
 Branch protection on `main` (requiring `test`, `frontend`, `build-backend`, `build-frontend`) and installing the Mend Renovate GitHub App are manual, out-of-band repo-admin steps — not committable as code, tracked as follow-ups in `docs/step7.md`.
 
+Merged via PR #1. All six jobs (`changes`, `gitleaks`, `test`, `frontend`, `build-backend`, `build-frontend`) reported green. Caught two real issues along the way: `aquasecurity/trivy-action` needed a `v`-prefixed tag, and even `v0.28.0` failed because its internal `setup-trivy` pin had been deleted upstream — fixed by bumping to `v0.36.0`. Since the PR only touched CI/docs config (no `backend/`/`frontend/` files), `frontend`/`build-backend`/`build-frontend`'s *real* steps (lint/test/build/Trivy) were correctly path-filtered out rather than actually exercised — confirms path filtering works as designed, but full validation of those jobs (and Trivy's SARIF upload) awaits the next PR that touches those paths. `gitleaks` isn't path-filtered and ran for real, no findings.
+
+Follow-up: Python version was hardcoded in both `ci.yml` and `backend/Dockerfile` with no shared source of truth (unlike Node's `.nvmrc`). Added `backend/.python-version` and switched `actions/setup-python` to `python-version-file`, mirroring the Node pattern (branch `single-source-python-version`).
+
 ---
 
 ## Step 8: Observability
