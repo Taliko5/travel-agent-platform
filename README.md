@@ -138,6 +138,6 @@ In short: `CLAUDE.md` tells the agent how to work in the repo *right now*, `docs
 - [x] Step 5: Docker + docker-compose + k8s manifests
 - [x] Step 6: Frontend (Next.js 14 / TypeScript)
 - [x] Step 6c: Testing, linting & formatting (frontend + backend)
-- [ ] Step 7: GitHub Actions CI/CD
+- [x] Step 7: GitHub Actions CI/CD
 - [ ] Step 8: Observability (Grafana, Prometheus, OpenTelemetry)
 - [ ] Step 9: AWS deployment (ECS / EKS)

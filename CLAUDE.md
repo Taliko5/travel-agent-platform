@@ -115,6 +115,10 @@ frontend/
 
 **Backend `/chat` endpoint tests** — mock `api.main.graph` directly (`patch("api.main.graph")`, set `.ainvoke` to an `AsyncMock`), not the individual agent nodes. `build_graph()` only wires `StateGraph` nodes/edges at import time — it never invokes a node — so importing `api.main` needs no `GOOGLE_API_KEY` either way. Agent routing itself is covered separately in `test_graph_routing.py` and the Step 4 test files.
 
+**Runtime version single-sourcing** — Node version lives in root `.nvmrc` (both `frontend/` and `.github/workflows/ci.yml`'s `setup-node` read it); Python version lives in `backend/.python-version` (`ci.yml`'s `setup-python` reads it via `python-version-file`). `backend/Dockerfile` and `frontend/Dockerfile` still hardcode their base image version separately — Docker `FROM` can't read a version file without extra `ARG` plumbing — so bumping a runtime version means updating the version file *and* the Dockerfile.
+
+**CI path filtering** — `.github/workflows/ci.yml`'s `changes` job (`dorny/paths-filter`) gates `test`/`build-backend` on `backend/**` changes and `frontend`/`build-frontend` on `frontend/**` changes via per-step `if:` conditions, not job-level `if:`. This means a backend-only PR still shows `frontend`/`build-frontend` as green (steps no-op), not skipped/absent — required for branch-protection required-checks to stay satisfiable on every PR.
+
 ## Docs
 
 - `docs/plan.md` — step-by-step roadmap and progress
