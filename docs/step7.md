@@ -20,12 +20,14 @@ Backend and frontend verification (lint + test) and Docker build jobs on every p
 
 **Concurrency, permissions, path filtering, branch protection, Renovate, Trivy, gitleaks** — see `openspec/changes/harden-ci-pipeline/design.md` for the full rationale behind each addition below.
 
+**Python version single-sourced via `backend/.python-version`** — `python-version: "3.13"` was hardcoded directly in `ci.yml`, duplicating `backend/Dockerfile`'s `FROM python:3.13-slim` with no shared source of truth (unlike Node, which already has a root `.nvmrc`). Added `backend/.python-version` and pointed `actions/setup-python` at it via `python-version-file`, mirroring the Node pattern. `backend/Dockerfile`'s `FROM` line stays a separate manual pin — Docker can't read a version file into `FROM` without extra `ARG` plumbing, the same tradeoff already accepted for `frontend/Dockerfile`'s `node:24-alpine`.
+
 ## File
 
 See `.github/workflows/ci.yml` for the full workflow. Jobs:
 
 - `changes` — `dorny/paths-filter@v3`, producing `backend`/`frontend` boolean outputs used to gate the jobs below (jobs still run and report a status; their real steps no-op when their path group didn't change, so branch-protection required checks are always satisfiable).
-- `test` — checkout → Python 3.13 → pip cache → install deps → `ruff check backend/` → `ruff format --check backend/` → `pytest backend/tests/ -v`.
+- `test` — checkout → Python (`backend/.python-version`) → pip cache → install deps → `ruff check backend/` → `ruff format --check backend/` → `pytest backend/tests/ -v`.
 - `build-backend` — needs `test` → Docker Buildx → build `backend/Dockerfile` (`push: false`, GHA layer cache) → Trivy scan (non-blocking, SARIF) → upload to Security tab.
 - `frontend` — checkout → `actions/setup-node@v4` (`node-version-file: ".nvmrc"`) → `npm ci` → `npm run lint` → `npm test` → `npm run build`.
 - `build-frontend` — needs `frontend` → Docker Buildx → build `frontend/Dockerfile` (`push: false`, GHA layer cache) → Trivy scan (non-blocking, SARIF) → upload to Security tab.
@@ -71,13 +73,14 @@ When Step 9 adds ECR push, append a third `push` job to the same `ci.yml` — `t
 ## Tasks
 
 - [x] 7.1 Create `.github/workflows/ci.yml`
-- [ ] 7.2 Verify `test` job passes (ruff + pytest, no API key)
-- [ ] 7.3 Verify `build-backend` job passes (docker build succeeds in CI)
+- [ ] 7.2 Verify `test` job passes (ruff + pytest, no API key) — job reported `success` when PR #1 merged, but its real steps were path-filter-skipped (that PR touched no `backend/` files); not yet exercised for real under the new pipeline structure.
+- [ ] 7.3 Verify `build-backend` job passes (docker build succeeds in CI) — same caveat as 7.2; Docker build verified locally against the exact `context`/`file` paths, not yet on a live runner.
 - [x] 7.4 Update `docs/plan.md` Step 7 to Done
-- [x] 7.5 Apply `frontend`/`build-frontend` jobs, concurrency/permissions/path-filtering, Trivy, gitleaks (`openspec/changes/harden-ci-pipeline/`)
-- [ ] 7.6 Verify `frontend` and `build-frontend` jobs pass in CI
+- [x] 7.5 Apply `frontend`/`build-frontend` jobs, concurrency/permissions/path-filtering, Trivy, gitleaks (`openspec/changes/harden-ci-pipeline/`) — merged via PR #1.
+- [ ] 7.6 Verify `frontend` and `build-frontend` jobs pass in CI — same caveat as 7.2/7.3.
 - [ ] 7.7 Configure branch protection on `main` (manual, out-of-band)
 - [ ] 7.8 Install Renovate GitHub App (manual, out-of-band)
+- [x] 7.9 Single-source backend Python version via `backend/.python-version` (branch `single-source-python-version`)
 
 ## Debugging
 
@@ -96,11 +99,11 @@ Common `build-backend`/`build-frontend` job failures:
 ## Definition of Done
 
 - [x] `.github/workflows/ci.yml` committed (`test`, `build-backend`, `frontend`, `build-frontend`, `gitleaks`, `changes`)
-- [ ] `test` job: `ruff check`, `ruff format --check`, `pytest` all exit 0
-- [ ] `frontend` job: `npm run lint`, `npm test`, `npm run build` all exit 0
-- [ ] `build-backend`/`build-frontend` jobs: Docker images build without errors
-- [ ] Trivy SARIF results appear in the Security tab for both images
-- [ ] All jobs green in GitHub Actions UI, including on a docs-only diff (path-filter skip still reports success)
+- [ ] `test` job: `ruff check`, `ruff format --check`, `pytest` all exit 0 — not yet exercised for real post-refactor (see 7.2)
+- [ ] `frontend` job: `npm run lint`, `npm test`, `npm run build` all exit 0 — not yet exercised for real post-refactor (see 7.6)
+- [ ] `build-backend`/`build-frontend` jobs: Docker images build without errors — not yet exercised for real post-refactor (see 7.3/7.6); both build clean locally
+- [ ] Trivy SARIF results appear in the Security tab for both images — Trivy steps haven't run yet (path-filtered out on every PR so far)
+- [x] All jobs green in GitHub Actions UI, including on a docs-only diff (path-filter skip still reports success) — confirmed on PR #1
 - [ ] Branch protection on `main` requires `test`, `frontend`, `build-backend`, `build-frontend`
 - [ ] Renovate GitHub App installed, Dependency Dashboard issue created
-- [ ] No secrets required
+- [x] No secrets required

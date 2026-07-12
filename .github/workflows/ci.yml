@@ -1,3 +1,5 @@
+# CI pipeline: lint/test/build backend & frontend independently,
+# skip a stack's steps when its path didn't change, always scan for secrets.
 name: CI
 
 on:
@@ -8,12 +10,15 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
+  # supersede older in-flight runs on the same branch
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  # Detect whether this push/PR touched backend/ or frontend/,
+  # so downstream jobs can skip irrelevant work.
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -34,6 +39,11 @@ jobs:
             frontend:
               - 'frontend/**'
 
+      - name: Report detected changes
+        run: |
+          echo "backend changed: ${{ steps.filter.outputs.backend }}"
+          echo "frontend changed: ${{ steps.filter.outputs.frontend }}"
+
   test:
     runs-on: ubuntu-latest
     needs: changes
@@ -42,11 +52,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Report path-filter result
+        run: |
+          if [ "${{ needs.changes.outputs.backend }}" == "true" ]; then
+            echo "backend/ changed — running lint, format check, and tests"
+          else
+            echo "backend/ unchanged — skipping steps below, reporting success as a no-op required check"
+          fi
+
       - name: Set up Python
         if: needs.changes.outputs.backend == 'true'
         uses: actions/setup-python@v5
         with:
-          python-version-file: "backend/.python-version"
+          python-version-file: 'backend/.python-version'
 
       - name: Cache pip dependencies
         if: needs.changes.outputs.backend == 'true'
@@ -84,6 +102,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Report path-filter result
+        run: |
+          if [ "${{ needs.changes.outputs.backend }}" == "true" ]; then
+            echo "backend/ changed — building the Docker image and scanning it"
+          else
+            echo "backend/ unchanged — skipping steps below, reporting success as a no-op required check"
+          fi
+
       - name: Set up Docker Buildx
         if: needs.changes.outputs.backend == 'true'
         uses: docker/setup-buildx-action@v3
@@ -102,12 +128,13 @@ jobs:
 
       - name: Scan image with Trivy
         if: needs.changes.outputs.backend == 'true'
+        # pin: v1 not yet released as of 2026-07
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: travel-agent-backend:ci
           format: sarif
           output: trivy-backend.sarif
-          exit-code: "0"
+          exit-code: '0'
 
       - name: Upload Trivy scan results
         if: needs.changes.outputs.backend == 'true'
@@ -124,11 +151,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Report path-filter result
+        run: |
+          if [ "${{ needs.changes.outputs.frontend }}" == "true" ]; then
+            echo "frontend/ changed — installing deps, linting, testing, and building"
+          else
+            echo "frontend/ unchanged — skipping steps below, reporting success as a no-op required check"
+          fi
+
       - name: Set up Node.js
         if: needs.changes.outputs.frontend == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version-file: ".nvmrc"
+          node-version-file: '.nvmrc'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -163,6 +198,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Report path-filter result
+        run: |
+          if [ "${{ needs.changes.outputs.frontend }}" == "true" ]; then
+            echo "frontend/ changed — building the Docker image and scanning it"
+          else
+            echo "frontend/ unchanged — skipping steps below, reporting success as a no-op required check"
+          fi
+
       - name: Set up Docker Buildx
         if: needs.changes.outputs.frontend == 'true'
         uses: docker/setup-buildx-action@v3
@@ -186,7 +229,7 @@ jobs:
           image-ref: travel-agent-frontend:ci
           format: sarif
           output: trivy-frontend.sarif
-          exit-code: "0"
+          exit-code: '0'
 
       - name: Upload Trivy scan results
         if: needs.changes.outputs.frontend == 'true'
