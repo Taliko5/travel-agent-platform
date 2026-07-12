@@ -102,7 +102,7 @@ jobs:
 
       - name: Scan image with Trivy
         if: needs.changes.outputs.backend == 'true'
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: travel-agent-backend:ci
           format: sarif
@@ -181,7 +181,7 @@ jobs:
 
       - name: Scan image with Trivy
         if: needs.changes.outputs.frontend == 'true'
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: travel-agent-frontend:ci
           format: sarif
