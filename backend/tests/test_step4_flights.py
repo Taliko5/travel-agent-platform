@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, patch
 # flight_server.search_flights
 # ---------------------------------------------------------------------------
 
-class TestSearchFlights:
 
+class TestSearchFlights:
     @pytest.mark.asyncio
     async def test_known_pair_returns_matching_flights(self):
         """search_flights returns flights for a known city pair."""
@@ -68,7 +68,9 @@ class TestSearchFlights:
         result = await search_flights("flights from Berlin to Sydney")
 
         assert "(Showing sample results — specific route not found)" in result
-        assert "Generic Air" in result or "Budget Fly" in result or "Star Travel" in result
+        assert (
+            "Generic Air" in result or "Budget Fly" in result or "Star Travel" in result
+        )
 
     @pytest.mark.asyncio
     async def test_empty_query_returns_fallback(self):
@@ -84,7 +86,7 @@ class TestSearchFlights:
         """Each city pair defined in MOCK_FLIGHTS returns matched (non-fallback) results."""
         from mcp_servers.flight_server import search_flights, MOCK_FLIGHTS
 
-        for (origin, destination) in MOCK_FLIGHTS:
+        for origin, destination in MOCK_FLIGHTS:
             result = await search_flights(f"flights from {origin} to {destination}")
             assert "(Showing sample results" not in result, (
                 f"Expected real results for {origin} → {destination}, got fallback"
@@ -105,8 +107,8 @@ class TestSearchFlights:
 # nodes.call_flight_tool
 # ---------------------------------------------------------------------------
 
-class TestCallFlightToolNode:
 
+class TestCallFlightToolNode:
     @pytest.mark.asyncio
     async def test_flight_data_written_to_state(self):
         """call_flight_tool writes the flight string into state['flight_data']."""
@@ -177,8 +179,8 @@ class TestCallFlightToolNode:
 # graph.route_by_intent — flight routing
 # ---------------------------------------------------------------------------
 
-class TestRouteByIntentFlights:
 
+class TestRouteByIntentFlights:
     def _state(self, intent: str, user_input: str = "") -> dict:
         return {
             "intent": intent,
@@ -193,8 +195,20 @@ class TestRouteByIntentFlights:
         """route_by_intent sends transportation intent to call_flight_tool when query mentions flights."""
         from agent.graph import route_by_intent
 
-        for keyword in ["flight", "flights", "fly", "flying", "airline", "airlines", "airport", "plane", "airfare"]:
-            state = self._state("transportation", f"I want to {keyword} from Tokyo to London")
+        for keyword in [
+            "flight",
+            "flights",
+            "fly",
+            "flying",
+            "airline",
+            "airlines",
+            "airport",
+            "plane",
+            "airfare",
+        ]:
+            state = self._state(
+                "transportation", f"I want to {keyword} from Tokyo to London"
+            )
             assert route_by_intent(state) == "call_flight_tool", (
                 f"Expected call_flight_tool for keyword '{keyword}'"
             )
@@ -203,7 +217,9 @@ class TestRouteByIntentFlights:
         """route_by_intent sends transportation intent to retrieve_context when no flight keywords present."""
         from agent.graph import route_by_intent
 
-        state = self._state("transportation", "How do I get from Kyoto to Tokyo by train?")
+        state = self._state(
+            "transportation", "How do I get from Kyoto to Tokyo by train?"
+        )
         assert route_by_intent(state) == "retrieve_context"
 
     def test_transportation_bus_query_routes_to_retrieve_context(self):

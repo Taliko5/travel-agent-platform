@@ -1,12 +1,4 @@
-import {
-  Box,
-  Text,
-  Heading,
-  Code,
-  UnorderedList,
-  OrderedList,
-  ListItem,
-} from "@chakra-ui/react";
+import { Box, Text, Heading, Code, UnorderedList, OrderedList, ListItem } from "@chakra-ui/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";

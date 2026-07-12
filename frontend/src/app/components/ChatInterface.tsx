@@ -70,12 +70,7 @@ export function ChatInterface() {
         <MessageList messages={messages} />
         {loading && <ThinkingIndicator />}
       </VStack>
-      <ChatInput
-        value={input}
-        onChange={setInput}
-        onSubmit={handleSubmit}
-        disabled={loading}
-      />
+      <ChatInput value={input} onChange={setInput} onSubmit={handleSubmit} disabled={loading} />
     </Box>
   );
 }
