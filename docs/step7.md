@@ -2,59 +2,44 @@
 
 ## Goal
 
-Two-job pipeline on every push to `main` and every PR: lint + test, then Docker build. No image push in this step — that is Step 9 (AWS).
+Backend and frontend verification (lint + test) and Docker build jobs on every push to `main` and every PR, gated by branch protection so the checks are a real merge requirement — not just advisory. No image push in this step — that is Step 9 (AWS).
 
 ## Decisions
 
 **No secrets required** — all tests are fully mocked (`get_model()` / `get_vectorstore()` lazy-initialized, never called at import time). Pipeline passes on a fresh fork with zero configuration.
 
-**`needs: test` on the build job** — don't burn Docker build time on broken branches.
+**`needs: test` on `build-backend`, `needs: frontend` on `build-frontend`** — don't burn Docker build time on broken branches, per stack.
 
 **pip cache keyed on `requirements.txt` hash** — clean install only runs when dependencies change (~30–60s saved per run). `restore-keys: pip-` falls back to the most recent entry on key miss.
 
-**Docker layer cache via `type=gha, mode=max`** — caches all intermediate layers. The `pip install` layer (~60s) is reused on source-only changes.
+**Docker layer cache via `type=gha, mode=max`** — caches all intermediate layers. The `pip install`/`npm ci` layers are reused on source-only changes.
+
+**ESLint prerequisite** — the frontend job runs `npm run lint`, which requires `eslint`/`eslint-config-next` as devDependencies and a committed config; without them `next lint` prompts interactively to install, which hangs non-interactively in CI. This was closed by `step6c-test-lint-format`, which landed `eslint`/`eslint-config-next`/`.eslintrc.json` before this frontend job was applied.
+
+**Placeholder `npm test` step** — kept as a decision record even though it turned out to be moot: by the time this frontend job was applied, `step6c-test-lint-format` had already replaced the intended placeholder with a real Vitest suite (6 test files, 21 tests). `npm test` runs `vitest run` for real, not a placeholder.
+
+**Concurrency, permissions, path filtering, branch protection, Renovate, Trivy, gitleaks** — see `openspec/changes/harden-ci-pipeline/design.md` for the full rationale behind each addition below.
 
 ## File
 
-See `.github/workflows/ci.yml` for the full workflow.
+See `.github/workflows/ci.yml` for the full workflow. Jobs:
 
-Two jobs:
-- `test` — checkout → Python 3.13 → pip cache → install deps → `ruff check backend/` → `pytest backend/tests/ -v`
-- `build` — checkout → Docker Buildx → `docker build` with GHA layer cache (`push: false`)
+- `changes` — `dorny/paths-filter@v3`, producing `backend`/`frontend` boolean outputs used to gate the jobs below (jobs still run and report a status; their real steps no-op when their path group didn't change, so branch-protection required checks are always satisfiable).
+- `test` — checkout → Python 3.13 → pip cache → install deps → `ruff check backend/` → `ruff format --check backend/` → `pytest backend/tests/ -v`.
+- `build-backend` — needs `test` → Docker Buildx → build `backend/Dockerfile` (`push: false`, GHA layer cache) → Trivy scan (non-blocking, SARIF) → upload to Security tab.
+- `frontend` — checkout → `actions/setup-node@v4` (`node-version-file: ".nvmrc"`) → `npm ci` → `npm run lint` → `npm test` → `npm run build`.
+- `build-frontend` — needs `frontend` → Docker Buildx → build `frontend/Dockerfile` (`push: false`, GHA layer cache) → Trivy scan (non-blocking, SARIF) → upload to Security tab.
+- `gitleaks` — scans the push/PR diff for committed secrets, independent of path filtering (secrets can land in any file).
 
-### Gap: no frontend job
+Workflow-level `concurrency` (cancel superseded runs for the same ref) and `permissions: contents: read` (least-privilege `GITHUB_TOKEN`; `build-backend`/`build-frontend` additionally grant `security-events: write` for the SARIF upload step) apply across all jobs.
 
-`frontend/` (Step 6) has `npm run lint` and `npm run build` scripts but neither runs in CI — a broken build or lint error on the frontend can merge to `main` undetected. Proposed third job, independent of `test`/`build` (no `needs:`, so it runs in parallel):
+### Branch protection (manual, out-of-band)
 
-```yaml
-  frontend:
-    runs-on: ubuntu-latest
+`test`, `frontend`, `build-backend`, and `build-frontend` are configured as required status checks on `main` under Settings → Branches. This is what makes the pipeline a real merge gate rather than an advisory green checkmark — it cannot be committed as code (no repo-settings-as-code mechanism here) and must be applied by a repo admin.
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+### Renovate (dependency updates)
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: ".nvmrc"
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Lint
-        working-directory: frontend
-        run: npm run lint
-
-      - name: Build
-        working-directory: frontend
-        run: npm run build
-```
-
-Not yet applied to `.github/workflows/ci.yml` — pending confirmation.
+The Mend Renovate GitHub App must be installed on the repo (manual, out-of-band, same category as branch protection) for `renovate.json` (repo root, `{"extends": ["config:recommended"]}`) to take effect, covering `backend/requirements.txt` and `frontend/package-lock.json`.
 
 ### Step 9 extension (ECR push)
 
@@ -87,8 +72,12 @@ When Step 9 adds ECR push, append a third `push` job to the same `ci.yml` — `t
 
 - [x] 7.1 Create `.github/workflows/ci.yml`
 - [ ] 7.2 Verify `test` job passes (ruff + pytest, no API key)
-- [ ] 7.3 Verify `build` job passes (docker build succeeds in CI)
-- [ ] 7.4 Update `docs/plan.md` Step 7 to Done
+- [ ] 7.3 Verify `build-backend` job passes (docker build succeeds in CI)
+- [x] 7.4 Update `docs/plan.md` Step 7 to Done
+- [x] 7.5 Apply `frontend`/`build-frontend` jobs, concurrency/permissions/path-filtering, Trivy, gitleaks (`openspec/changes/harden-ci-pipeline/`)
+- [ ] 7.6 Verify `frontend` and `build-frontend` jobs pass in CI
+- [ ] 7.7 Configure branch protection on `main` (manual, out-of-band)
+- [ ] 7.8 Install Renovate GitHub App (manual, out-of-band)
 
 ## Debugging
 
@@ -99,14 +88,19 @@ cd backend && pytest tests/ -v
 docker build -f backend/Dockerfile backend/
 ```
 
-Common `build` job failures:
+Common `build-backend`/`build-frontend` job failures:
 - Package in `venv` but not frozen to `requirements.txt`
-- File path in `COPY` that doesn't exist in `backend/`
+- File path in `COPY` that doesn't exist in `backend/` or `frontend/`
+- `next lint` prompting interactively (missing `eslint`/`eslint-config-next` or config — should not recur, both are committed)
 
 ## Definition of Done
 
-- [x] `.github/workflows/ci.yml` committed
-- [ ] `test` job: `ruff check` exits 0, `pytest` exits 0
-- [ ] `build` job: Docker image builds without errors
-- [ ] Both jobs green in GitHub Actions UI
+- [x] `.github/workflows/ci.yml` committed (`test`, `build-backend`, `frontend`, `build-frontend`, `gitleaks`, `changes`)
+- [ ] `test` job: `ruff check`, `ruff format --check`, `pytest` all exit 0
+- [ ] `frontend` job: `npm run lint`, `npm test`, `npm run build` all exit 0
+- [ ] `build-backend`/`build-frontend` jobs: Docker images build without errors
+- [ ] Trivy SARIF results appear in the Security tab for both images
+- [ ] All jobs green in GitHub Actions UI, including on a docs-only diff (path-filter skip still reports success)
+- [ ] Branch protection on `main` requires `test`, `frontend`, `build-backend`, `build-frontend`
+- [ ] Renovate GitHub App installed, Dependency Dashboard issue created
 - [ ] No secrets required

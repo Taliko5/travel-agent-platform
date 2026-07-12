@@ -10,7 +10,7 @@
 | 4 | MCP servers — weather, flights, hotels | Done |
 | 5 | Docker + docker-compose + k8s manifests | Done |
 | 6 | Frontend — Next.js 14 / TypeScript | Done |
-| 7 | GitHub Actions CI/CD | Next |
+| 7 | GitHub Actions CI/CD | Done |
 | 8 | Observability (Grafana, Prometheus, OpenTelemetry) | Planned |
 | 9 | AWS deployment (ECS / EKS) | Planned |
 
@@ -85,9 +85,13 @@ Frontend CI wiring (format-check, real `npm test`, coverage as actual workflow s
 
 ## Step 7: GitHub Actions CI/CD
 
-See `docs/step7.md`.
+See `docs/step7.md` and `openspec/changes/harden-ci-pipeline/`.
 
-Goal: two-job pipeline (test + build) on push to `main` and PRs. No secrets required — all tests mocked. Step 8 adds a third `push` job for ECR.
+Goal: backend (`test`/`build-backend`) and frontend (`frontend`/`build-frontend`) verification + Docker build jobs on push to `main` and PRs, gated by branch protection so the checks are a real merge requirement. No secrets required — all tests mocked. Step 9 adds a `push` job for ECR.
+
+Built: `dorny/paths-filter` job-level path filtering (backend-only and frontend-only changes skip the other stack's real work while still reporting a required status), workflow-level `concurrency` (cancel superseded runs) and `permissions: contents: read`, the frontend job (`npm ci` → lint → test → build, using the ESLint config and Vitest suite `step6c-test-lint-format` already landed), `build-frontend` (Docker build parity with backend), Trivy image scanning (non-blocking, SARIF to the Security tab) on both build jobs, and a `gitleaks` job for secret scanning. `renovate.json` added at repo root for automated pip/npm dependency updates.
+
+Branch protection on `main` (requiring `test`, `frontend`, `build-backend`, `build-frontend`) and installing the Mend Renovate GitHub App are manual, out-of-band repo-admin steps — not committable as code, tracked as follow-ups in `docs/step7.md`.
 
 ---
 
