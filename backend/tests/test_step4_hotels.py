@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, patch
 # hotel_server.search_hotels
 # ---------------------------------------------------------------------------
 
-class TestSearchHotels:
 
+class TestSearchHotels:
     @pytest.mark.asyncio
     async def test_known_city_returns_matching_hotels(self):
         """search_hotels returns hotels for a known city."""
@@ -66,7 +66,11 @@ class TestSearchHotels:
         result = await search_hotels("hotels in Berlin")
 
         assert "(Showing sample results — specific destination not found)" in result
-        assert "City Center Hotel" in result or "Budget Inn Express" in result or "Boutique Stay" in result
+        assert (
+            "City Center Hotel" in result
+            or "Budget Inn Express" in result
+            or "Boutique Stay" in result
+        )
 
     @pytest.mark.asyncio
     async def test_empty_query_returns_fallback(self):
@@ -106,15 +110,15 @@ class TestSearchHotels:
         result = await search_hotels("hotels in Kyoto")
 
         assert "⭐⭐⭐⭐⭐" in result  # Westin Miyako — 5 stars
-        assert "⭐⭐" in result       # Piece Hostel — 2 stars
+        assert "⭐⭐" in result  # Piece Hostel — 2 stars
 
 
 # ---------------------------------------------------------------------------
 # nodes.call_hotel_tool
 # ---------------------------------------------------------------------------
 
-class TestCallHotelToolNode:
 
+class TestCallHotelToolNode:
     @pytest.mark.asyncio
     async def test_hotel_data_written_to_state(self):
         """call_hotel_tool writes the hotel string into state['hotel_data']."""
@@ -189,8 +193,8 @@ class TestCallHotelToolNode:
 # graph.route_by_intent — hotel routing
 # ---------------------------------------------------------------------------
 
-class TestRouteByIntentHotels:
 
+class TestRouteByIntentHotels:
     def _state(self, intent: str, user_input: str = "") -> dict:
         return {
             "intent": intent,
@@ -213,7 +217,11 @@ class TestRouteByIntentHotels:
         """Hotel intent always routes to call_hotel_tool regardless of query wording."""
         from agent.graph import route_by_intent
 
-        for query in ["where to stay in Riga", "accommodation in Lima", "ryokan in Kyoto"]:
+        for query in [
+            "where to stay in Riga",
+            "accommodation in Lima",
+            "ryokan in Kyoto",
+        ]:
             state = self._state("hotel", query)
             assert route_by_intent(state) == "call_hotel_tool", (
                 f"Expected call_hotel_tool for query: '{query}'"

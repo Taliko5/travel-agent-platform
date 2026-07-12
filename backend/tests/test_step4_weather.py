@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _mock_geo_response(city_name: str, lat: float, lon: float) -> MagicMock:
     """Build a mock httpx response for the geocoding API."""
     r = MagicMock()
@@ -45,8 +46,8 @@ def _mock_forecast_response(temp: float) -> MagicMock:
 # weather_server.get_weather
 # ---------------------------------------------------------------------------
 
-class TestGetWeather:
 
+class TestGetWeather:
     @pytest.mark.asyncio
     async def test_valid_city_returns_temperature_string(self):
         """get_weather returns 'Current weather in {city}: {temp}°C' for a known city."""
@@ -60,7 +61,9 @@ class TestGetWeather:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("mcp_servers.weather_server.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "mcp_servers.weather_server.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await get_weather("Tokyo")
 
         assert result == "Current weather in Tokyo: 22.5°C"
@@ -75,7 +78,9 @@ class TestGetWeather:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("mcp_servers.weather_server.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "mcp_servers.weather_server.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await get_weather("NotARealCity99999")
 
         assert result == "Could not find location: NotARealCity99999"
@@ -91,7 +96,9 @@ class TestGetWeather:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("mcp_servers.weather_server.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "mcp_servers.weather_server.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await get_weather("Tokyo")
 
         assert result == "Weather service unavailable"
@@ -109,7 +116,9 @@ class TestGetWeather:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("mcp_servers.weather_server.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "mcp_servers.weather_server.httpx.AsyncClient", return_value=mock_client
+        ):
             result = await get_weather("Lima")
 
         assert "17.3" in result
@@ -119,8 +128,8 @@ class TestGetWeather:
 # nodes.call_weather_tool
 # ---------------------------------------------------------------------------
 
-class TestCallWeatherToolNode:
 
+class TestCallWeatherToolNode:
     @pytest.mark.asyncio
     async def test_weather_data_written_to_state(self):
         """call_weather_tool writes the weather string into state['weather_data']."""
@@ -137,9 +146,12 @@ class TestCallWeatherToolNode:
         mock_llm_response = MagicMock()
         mock_llm_response.text = "Riga"
 
-        with patch("agent.nodes.get_model") as mock_get_model, \
-             patch("agent.nodes.get_weather", new_callable=AsyncMock) as mock_get_weather:
-
+        with (
+            patch("agent.nodes.get_model") as mock_get_model,
+            patch(
+                "agent.nodes.get_weather", new_callable=AsyncMock
+            ) as mock_get_weather,
+        ):
             mock_get_model.return_value.invoke.return_value = mock_llm_response
             mock_get_weather.return_value = "Current weather in Riga: 18.0°C"
 
@@ -163,9 +175,12 @@ class TestCallWeatherToolNode:
         mock_llm_response = MagicMock()
         mock_llm_response.text = "Fukuoka"
 
-        with patch("agent.nodes.get_model") as mock_get_model, \
-             patch("agent.nodes.get_weather", new_callable=AsyncMock) as mock_get_weather:
-
+        with (
+            patch("agent.nodes.get_model") as mock_get_model,
+            patch(
+                "agent.nodes.get_weather", new_callable=AsyncMock
+            ) as mock_get_weather,
+        ):
             mock_get_model.return_value.invoke.return_value = mock_llm_response
             mock_get_weather.return_value = "Current weather in Fukuoka: 21.0°C"
 
@@ -191,9 +206,12 @@ class TestCallWeatherToolNode:
         mock_llm_response = MagicMock()
         mock_llm_response.text = "Abu Dhabi"
 
-        with patch("agent.nodes.get_model") as mock_get_model, \
-             patch("agent.nodes.get_weather", new_callable=AsyncMock) as mock_get_weather:
-
+        with (
+            patch("agent.nodes.get_model") as mock_get_model,
+            patch(
+                "agent.nodes.get_weather", new_callable=AsyncMock
+            ) as mock_get_weather,
+        ):
             mock_get_model.return_value.invoke.return_value = mock_llm_response
             mock_get_weather.return_value = "Current weather in Abu Dhabi: 38.0°C"
 
@@ -207,44 +225,69 @@ class TestCallWeatherToolNode:
 # graph.route_by_intent
 # ---------------------------------------------------------------------------
 
-class TestRouteByIntent:
 
+class TestRouteByIntent:
     def test_weather_intent_routes_to_call_weather_tool(self):
         """route_by_intent returns 'call_weather_tool' for weather intent."""
         from agent.graph import route_by_intent
 
-        state = {"intent": "weather", "user_input": "", "context": None,
-                 "weather_data": None, "response": None}
+        state = {
+            "intent": "weather",
+            "user_input": "",
+            "context": None,
+            "weather_data": None,
+            "response": None,
+        }
         assert route_by_intent(state) == "call_weather_tool"
 
     def test_hotel_intent_routes_to_call_hotel_tool(self):
         """route_by_intent returns 'call_hotel_tool' for hotel intent."""
         from agent.graph import route_by_intent
 
-        state = {"intent": "hotel", "user_input": "", "context": None,
-                 "weather_data": None, "response": None}
+        state = {
+            "intent": "hotel",
+            "user_input": "",
+            "context": None,
+            "weather_data": None,
+            "response": None,
+        }
         assert route_by_intent(state) == "call_hotel_tool"
 
     def test_transportation_intent_routes_to_retrieve_context(self):
         """route_by_intent returns 'retrieve_context' for transportation intent (pre-4b)."""
         from agent.graph import route_by_intent
 
-        state = {"intent": "transportation", "user_input": "", "context": None,
-                 "weather_data": None, "response": None}
+        state = {
+            "intent": "transportation",
+            "user_input": "",
+            "context": None,
+            "weather_data": None,
+            "response": None,
+        }
         assert route_by_intent(state) == "retrieve_context"
 
     def test_general_intent_routes_to_retrieve_context(self):
         """route_by_intent returns 'retrieve_context' for general intent."""
         from agent.graph import route_by_intent
 
-        state = {"intent": "general", "user_input": "", "context": None,
-                 "weather_data": None, "response": None}
+        state = {
+            "intent": "general",
+            "user_input": "",
+            "context": None,
+            "weather_data": None,
+            "response": None,
+        }
         assert route_by_intent(state) == "retrieve_context"
 
     def test_unknown_intent_routes_to_retrieve_context(self):
         """route_by_intent falls back to 'retrieve_context' for any unknown intent."""
         from agent.graph import route_by_intent
 
-        state = {"intent": "something_unexpected", "user_input": "", "context": None,
-                 "weather_data": None, "response": None}
+        state = {
+            "intent": "something_unexpected",
+            "user_input": "",
+            "context": None,
+            "weather_data": None,
+            "response": None,
+        }
         assert route_by_intent(state) == "retrieve_context"

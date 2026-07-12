@@ -9,13 +9,15 @@ from mcp_servers.hotel_server import search_hotels
 
 load_dotenv()
 
+
 @lru_cache(maxsize=1)
 def get_model():
     return ChatGoogleGenerativeAI(model="gemini-3.5-flash", thinking_level="low")
 
-def classify_intent(state: AgentState)-> AgentState:
+
+def classify_intent(state: AgentState) -> AgentState:
     """Classify the user's input into a category."""
-    
+
     valid_intents = ["transportation", "hotel", "weather", "general"]
 
     prompt = f"""
@@ -27,19 +29,17 @@ def classify_intent(state: AgentState)-> AgentState:
     
     Respond with only the category name, one word, lowercase.
     """
-    
+
     response = get_model().invoke(prompt)
     raw_intent = response.text.strip().lower()
     intent = next(
         (valid for valid in valid_intents if valid in raw_intent),
-        "general"  # どれにも当たらなければ "general" にフォールバック
+        "general",  # どれにも当たらなければ "general" にフォールバック
     )
-    
-    return {
-        **state,
-        "intent":intent
-    }
-    
+
+    return {**state, "intent": intent}
+
+
 def retrieve_context_node(state: AgentState) -> AgentState:
     """Retrieve relevant travel context from ChromaDB."""
     context = retrieve_context(state["user_input"])

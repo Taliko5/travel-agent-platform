@@ -1,5 +1,6 @@
 from typing import TypedDict, Optional
 
+
 class AgentState(TypedDict):
     user_input: str
     intent: Optional[str]
@@ -8,4 +9,3 @@ class AgentState(TypedDict):
     flight_data: Optional[str]
     hotel_data: Optional[str]
     response: Optional[str]
-    

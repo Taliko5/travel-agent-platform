@@ -27,7 +27,8 @@ backend/rag/chroma_db/
 
 
 # testing
-/coverage
+coverage/
+backend/.coverage/
 
 # next.js
 /out/

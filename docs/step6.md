@@ -126,3 +126,9 @@ Behaviour:
 - [x] Chat works end-to-end through docker-compose
 - [x] `frontend/Dockerfile` builds without errors
 - [x] `.env.local.example` committed; real `.env.local` is not
+
+## Follow-up: Step 6c — Testing, Linting & Formatting
+
+> **Note:** like the superseded design note above, this section is a pointer, not the source of truth — see `openspec/changes/step6c-test-lint-format/` and `docs/plan.md`'s Step 6c entry for the full writeup.
+
+Step 7's CI draft (`docs/step7.md`) found the frontend built here had no test runner, no ESLint, and no formatter at all. Step 6c closed that: Vitest + React Testing Library (with `renderWithProviders`, since every component needs the real `Providers`/`ChakraProvider` context to render correctly under test) for `ChatInterface`, `MessageList`, `MessageBubble`, `ChatInput`, `ThinkingIndicator` (`SparkleHeader` gets a smoke test only), plus ESLint (`next/core-web-vitals`) and Prettier. Backend coverage was extended alongside it — see `docs/plan.md` for the full scope of both.

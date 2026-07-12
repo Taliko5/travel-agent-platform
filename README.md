@@ -8,6 +8,7 @@ AI-powered travel planning agent with production-ready infrastructure.
 - **LLM:** Google Gemini (`gemini-3.5-flash`, `gemini-embedding-001`)
 - **Tools:** MCP servers — weather (live Open-Meteo), flights (mock), hotels (mock)
 - **Infra:** Docker, Kubernetes, GitHub Actions
+- **Testing/Quality:** pytest (backend), Vitest + React Testing Library (frontend), ruff (lint + format), ESLint + Prettier
 
 ## Running Locally
 
@@ -47,6 +48,26 @@ docker-compose exec backend python rag/ingest.py   # first-time ingest
 
 Starts both services together: backend on `:8000`, frontend on `:3000`. Requires `GOOGLE_API_KEY` set in `backend/.env` beforehand (docker-compose reads it via `env_file`). Stop with `docker-compose down`.
 
+## Testing, Linting & Formatting
+
+```bash
+# Backend — no GOOGLE_API_KEY needed, all LLM/vector-store calls are mocked
+cd backend
+pytest tests/ -v                              # 63 tests
+pytest --cov=. --cov-report=term tests/ -v    # with coverage (report-only)
+ruff check backend/                           # lint
+ruff format backend/                          # format (--check to verify only)
+
+# Frontend
+cd frontend
+npm test                                      # Vitest + React Testing Library, 21 tests
+npm test -- --coverage                        # with coverage (report-only)
+npm run lint                                  # ESLint (next/core-web-vitals)
+npm run format                                # Prettier (format:check to verify only)
+```
+
+Frontend component tests use `renderWithProviders` (`frontend/src/test-utils.tsx`) instead of React Testing Library's bare `render`, since every component runs inside the app's real `ChakraProvider` + custom theme in production.
+
 ## Project Structure
 
 ```
@@ -68,9 +89,14 @@ backend/
 └── tests/
     ├── test_step4_flights.py
     ├── test_step4_hotels.py
-    └── test_step4_weather.py
+    ├── test_step4_weather.py
+    ├── test_graph_routing.py     # route_by_intent branching
+    ├── test_api_main.py          # /health, /, /chat + CORS (api.main.graph mocked)
+    └── test_rag_retriever.py     # retrieve_context (get_vectorstore mocked)
 
 frontend/                         # see openspec/changes/add-chat-frontend
+├── src/test-utils.tsx            # renderWithProviders — RTL render + real Providers
+├── vitest.config.ts              # jsdom env, @vitest/coverage-v8
 └── src/app/
     ├── page.tsx                  # renders <ChatInterface />
     ├── providers.tsx             # "use client" ChakraProvider wrapper
@@ -79,7 +105,8 @@ frontend/                         # see openspec/changes/add-chat-frontend
         ├── SparkleHeader.tsx     # decorative accents (no state)
         ├── MessageList.tsx       # maps messages[] → MessageBubble
         ├── MessageBubble.tsx     # single message + conditional intent label
-        └── ChatInput.tsx         # input + star send button
+        ├── ChatInput.tsx         # input + star send button
+        └── *.test.tsx            # one test file per component above, colocated
 ```
 
 Frontend components are split one-per-concern (rather than a single `ChatInterface.tsx`) so a future change — e.g. favoriting a message, or a custom loading indicator — touches one component instead of a file that also owns fetch/state logic.
@@ -110,6 +137,7 @@ In short: `CLAUDE.md` tells the agent how to work in the repo *right now*, `docs
 - [x] Step 4: MCP servers (weather / flights / hotels)
 - [x] Step 5: Docker + docker-compose + k8s manifests
 - [x] Step 6: Frontend (Next.js 14 / TypeScript)
+- [x] Step 6c: Testing, linting & formatting (frontend + backend)
 - [ ] Step 7: GitHub Actions CI/CD
 - [ ] Step 8: Observability (Grafana, Prometheus, OpenTelemetry)
 - [ ] Step 9: AWS deployment (ECS / EKS)

@@ -17,9 +17,19 @@ npm run dev                          # localhost:3000
 
 # Tests (no API key needed — all mocked)
 cd backend && pytest tests/ -v
+cd frontend && npm test              # Vitest + React Testing Library
+
+# Coverage (report-only, doesn't fail the build)
+cd backend && pytest --cov=. --cov-report=term tests/ -v
+cd frontend && npm test -- --coverage
 
 # Lint
 ruff check backend/
+cd frontend && npm run lint          # ESLint (next/core-web-vitals)
+
+# Format
+ruff format backend/                 # ruff format --check backend/ to check only
+cd frontend && npm run format        # npm run format:check to check only
 
 # Ingest travel guides into ChromaDB (run once)
 cd backend && python rag/ingest.py
@@ -70,10 +80,15 @@ backend/
 └── tests/
     ├── test_step4_flights.py
     ├── test_step4_hotels.py
-    └── test_step4_weather.py
+    ├── test_step4_weather.py
+    ├── test_graph_routing.py     route_by_intent branching
+    ├── test_api_main.py          /health, /, /chat + CORS (api.main.graph mocked)
+    └── test_rag_retriever.py     retrieve_context (get_vectorstore mocked)
 
 frontend/
 ├── src/theme/index.ts      extendTheme(): unicorn color scales, chatRadius, fonts
+├── src/test-utils.tsx      renderWithProviders — RTL render wrapped with real Providers
+├── vitest.config.ts        jsdom env, @vitest/coverage-v8, path alias @/* → src/*
 └── src/app/
     ├── page.tsx            renders <ChatInterface />
     ├── providers.tsx       "use client" ChakraProvider wrapper
@@ -82,7 +97,8 @@ frontend/
         ├── SparkleHeader.tsx  decorative accents (no state)
         ├── MessageList.tsx    maps messages[] → MessageBubble
         ├── MessageBubble.tsx  single message + conditional intent label
-        └── ChatInput.tsx      input + star send button
+        ├── ChatInput.tsx      input + star send button
+        └── *.test.tsx         one test file per component above, colocated
 ```
 
 ## Patterns to Know
@@ -94,6 +110,10 @@ frontend/
 **Intent routing** — `route_by_intent()` in `graph.py`. Transportation intent splits further: flight keywords → `call_flight_tool`, otherwise → `retrieve_context`.
 
 **State flow** — all nodes receive and return the full `AgentState` dict (`{**state, "field": value}`). Unused fields are `None`, not absent.
+
+**Frontend test rendering** — always use `renderWithProviders` from `frontend/src/test-utils.tsx`, never RTL's bare `render`. Every component runs inside `<Providers>` (`ChakraProvider` + the custom "unicorn" theme) in production; bare `render` mounts without that context and either breaks theme-dependent styling or silently falls back to Chakra's defaults (a false pass).
+
+**Backend `/chat` endpoint tests** — mock `api.main.graph` directly (`patch("api.main.graph")`, set `.ainvoke` to an `AsyncMock`), not the individual agent nodes. `build_graph()` only wires `StateGraph` nodes/edges at import time — it never invokes a node — so importing `api.main` needs no `GOOGLE_API_KEY` either way. Agent routing itself is covered separately in `test_graph_routing.py` and the Step 4 test files.
 
 ## Docs
 
