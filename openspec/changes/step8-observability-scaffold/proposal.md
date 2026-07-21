@@ -1,0 +1,34 @@
+## Why
+
+Step 8 of the roadmap (`docs/plan.md`) calls for observability: the FastAPI backend and LangGraph agent currently emit no metrics, traces, or structured logs, so there's no way to see `/chat` latency, which intent gets classified, how long the LLM or RAG calls take, or where a slow/broken request loses time. This change scaffolds the instrumentation plumbing so the pipeline can be wired end-to-end and understood hands-on, rather than treated as a black box.
+
+This revision supersedes the first draft of this change (same directory) after a second pass over `docs/plan.md`'s Step 8 scope turned up gaps the first draft either missed or punted on too readily: no OTel resource attributes (so multi-signal data can't be attributed to "this service, this version"), no way to jump from a metric spike to the logs/trace that explain it, CloudWatch dropped entirely instead of prepped, and no persistence for the very Prometheus data the user needs stable across `docker-compose` restarts while debugging. Those are folded in below.
+
+This remains a deliberately split effort: Claude Code scaffolds the boilerplate (compose services, SDK wiring, first-draft docs); the metric/span design decisions, dashboard construction, and getting real data flowing end-to-end are done by the user directly, with debugging done collaboratively rather than handed to Claude.
+
+## What Changes
+
+- Add `prometheus` and `grafana` services to `docker-compose.yaml`, with a Prometheus scrape config pointed at the backend's metrics endpoint, Grafana provisioned to read from that Prometheus instance, and **named volumes for both** so scrape history and dashboard/datasource state survive `docker-compose down`/`up` — losing that data on every restart would otherwise look like a broken pipeline during the user's own debugging pass.
+- Add OpenTelemetry SDK wiring to the FastAPI backend: tracer/meter provider setup **with a `Resource` carrying `service.name`/`service.version`/`deployment.environment`** (missing from the first draft — without it, every signal is anonymous and can't be filtered once a second service exists), `FastAPIInstrumentor` for automatic HTTP-level spans, and a `/metrics` endpoint exposing a Prometheus-compatible metrics reader.
+- Make the trace exporter **configurable via an `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable**, defaulting to a console exporter when unset, so a real trace backend (Tempo/Jaeger) can be pointed at later without code changes — the first draft hardcoded console-only with no swap-in path.
+- Add span instrumentation for LangGraph node execution via a LangChain `BaseCallbackHandler` (`OTelCallbackHandler`) registered once where the graph is invoked in `backend/api/main.py` — not a wrapper/decorator applied to each node function — so each node run (and each LLM/tool call inside it) produces a span without any changes to `backend/agent/graph.py` or `backend/agent/nodes.py`; placeholder scaffolding only, actual span naming and attributes are left for the user to define.
+- Add placeholder metric instrument declarations (counter/histogram objects) for the four key metrics named in `docs/plan.md` — `/chat` latency, intent distribution, LLM call duration, RAG retrieval rate — without filling in the specific bucket boundaries, label cardinality, or recording call sites; those are left as the user's implementation work.
+- **New:** Add minimal structured (JSON) logging to the backend, with the current OTel `trace_id`/`span_id` injected into each log record. This is the piece that makes "click a slow trace, find the matching logs" possible, and it's also the cheapest way to make Step 8 CloudWatch-ready without needing an AWS account yet — CloudWatch's ingestion is line-oriented JSON either way, so this groundwork carries forward into Step 9 instead of being redone.
+- **New:** Add unit tests for the scaffolded instrumentation itself (`/metrics` returns 200 with the four instrument names present; `OTelCallbackHandler` ends its span via the `_error` callbacks and doesn't interfere with exception propagation) — the first draft only promised existing tests wouldn't regress, with nothing verifying the new code paths.
+- Add `docs/step8.md` (first draft) explaining what's being instrumented and why, what's scaffolded vs. left for hands-on implementation, and noting LangSmith (already an installed transitive dependency via `langchain`) as an alternative/complementary LangGraph-native tracing option worth the user evaluating, without wiring it in.
+- **BREAKING**: none — purely additive; existing endpoints and agent behavior are unchanged.
+
+## Capabilities
+
+### New Capabilities
+- `observability`: OpenTelemetry instrumentation scaffolding (traces, metrics, resource-attributed and log-correlated) for the FastAPI backend and LangGraph agent, plus a local Prometheus/Grafana stack with persistent storage in docker-compose for scraping and visualizing the emitted metrics.
+
+### Modified Capabilities
+(none — no existing spec's requirements change; `chat-frontend` is unaffected)
+
+## Impact
+
+- **Affected code**: `docker-compose.yaml` (new services + volumes), `backend/api/main.py` (OTel + `/metrics` wiring + structured logging setup + registering `OTelCallbackHandler` on the graph invocation), `backend/requirements.txt` (OTel FastAPI/Prometheus exporter packages, structured-logging helper — core `opentelemetry-api`/`sdk`/`otlp-proto-grpc` are already present as transitive deps but not currently imported anywhere), `backend/tests/` (new instrumentation tests). Notably, `backend/agent/graph.py` and `backend/agent/nodes.py` are **not** modified.
+- **New files**: `docs/step8.md`, a Prometheus config file (e.g. `observability/prometheus.yml`), Grafana provisioning stubs (datasource pointing at Prometheus; empty dashboard folder for the user to fill in), `backend/observability/metrics.py` (placeholder instruments), `backend/observability/logging.py` (structured logging + trace-correlation setup), `backend/observability/callback_handler.py` (`OTelCallbackHandler`, a `BaseCallbackHandler` translating LangChain/LangGraph events into spans).
+- **Dependencies**: adds `opentelemetry-instrumentation-fastapi`, a Prometheus exporter (`prometheus-client` or `opentelemetry-exporter-prometheus`), and a JSON log formatter (e.g. `python-json-logger`) to `backend/requirements.txt`.
+- **Systems**: local `docker-compose up` stack only — no change to CI (`.github/workflows/ci.yml`), production deployment, or the not-yet-built Step 9 AWS infra. Actual CloudWatch log *shipping* (log group creation, IAM, agent/driver config) is still AWS-specific and out of scope here; it's called out in `docs/step8.md` as Step 9 follow-up, but the structured-JSON groundwork is done now so that follow-up is just plumbing, not a logging-format redesign.
