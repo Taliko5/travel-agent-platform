@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent.graph import build_graph  # noqa: E402
+from observability.callback_handler import OTelCallbackHandler  # noqa: E402
 from observability.logging import configure_logging  # noqa: E402
 
 
@@ -49,6 +50,10 @@ meter_provider = MeterProvider(
 )
 set_meter_provider(meter_provider)
 
+# Imported after set_meter_provider so the placeholder instruments register
+# against the configured MeterProvider (exposed via /metrics).
+from observability import metrics  # noqa: E402,F401
+
 configure_logging()
 logger = logging.getLogger(__name__)
 
@@ -63,6 +68,10 @@ app.add_middleware(
 FastAPIInstrumentor.instrument_app(app)
 app.mount("/metrics", prometheus_client.make_asgi_app())
 graph = build_graph()
+
+# Registered once and reused: run_ids are unique per run, so a single shared
+# handler is safe across concurrent /chat requests.
+otel_callback_handler = OTelCallbackHandler()
 
 
 class ChatRequest(BaseModel):
@@ -95,6 +104,7 @@ async def chat(request: ChatRequest):
             "flight_data": None,
             "weather_data": None,
             "hotel_data": None,
-        }
+        },
+        config={"callbacks": [otel_callback_handler]},
     )
     return ChatResponse(intent=result["intent"], response=result["response"])
