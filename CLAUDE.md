@@ -126,3 +126,4 @@ frontend/
 - `docs/step5.md` — Docker + docker-compose + k8s
 - `docs/step6.md` — Frontend (Next.js 14 / TypeScript)
 - `docs/step7.md` — GitHub Actions CI/CD
+- `docs/step8.md` — Observability (OpenTelemetry / Prometheus / Grafana)

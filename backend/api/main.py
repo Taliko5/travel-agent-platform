@@ -15,7 +15,6 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import (
     BatchSpanProcessor,
     ConsoleSpanExporter,
-    SimpleSpanProcessor,
 )
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -42,7 +41,9 @@ if otlp_endpoint:
         BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint))
     )
 else:
-    tracer_provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+    # BatchSpanProcessor exports from a background thread, matching the OTLP
+    # branch, so console export doesn't block the event loop on span end.
+    tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
 trace.set_tracer_provider(tracer_provider)
 
 meter_provider = MeterProvider(
@@ -65,7 +66,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-FastAPIInstrumentor.instrument_app(app)
+# Exclude self-observation noise: the compose healthcheck and Prometheus
+# scrape hit these on a timer, generating spans even with zero user traffic.
+FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")
 app.mount("/metrics", prometheus_client.make_asgi_app())
 graph = build_graph()
 
