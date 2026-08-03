@@ -16,12 +16,15 @@ from opentelemetry import metrics
 meter = metrics.get_meter("travel-agent-backend")
 
 # /chat request latency.
-# TODO (user): define labels/buckets and add .record() calls in the POST /chat
-# route handler in backend/api/main.py (wrap the graph.ainvoke call).
+# TODO (user): define labels and add .record() calls in the POST /chat route
+# handler in backend/api/main.py (wrap the graph.ainvoke call). Bucket
+# boundaries below are provisional starting values — tune them as part of
+# this work once real latency data is available.
 chat_request_duration = meter.create_histogram(
     name="chat_request_duration_seconds",
     unit="s",
     description="End-to-end latency of POST /chat requests.",
+    explicit_bucket_boundaries_advisory=[0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0],
 )
 
 # Classified intent distribution.
@@ -34,13 +37,15 @@ intent_classification_count = meter.create_counter(
 )
 
 # LLM call duration.
-# TODO (user): define labels/buckets and add .record() calls where
-# get_model().invoke is called in classify_intent / generate_response in
-# backend/agent/nodes.py (or record from OTelCallbackHandler on_llm_start/on_llm_end).
+# TODO (user): define labels and add .record() calls where get_model().invoke
+# is called in classify_intent / generate_response in backend/agent/nodes.py
+# (or record from OTelCallbackHandler on_llm_start/on_llm_end). Bucket
+# boundaries below are provisional starting values, not a final decision.
 llm_call_duration = meter.create_histogram(
     name="llm_call_duration_seconds",
     unit="s",
     description="Duration of individual LLM (Gemini) calls.",
+    explicit_bucket_boundaries_advisory=[0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
 )
 
 # RAG retrieval rate.
@@ -51,3 +56,14 @@ rag_retrieval_count = meter.create_counter(
     unit="1",
     description="Count of RAG context retrievals.",
 )
+
+# OTel's PrometheusMetricReader only exports an instrument once it has at
+# least one data point. Counters starting at 0 are a truthful representation,
+# so we seed them to make them visible on /metrics immediately. Histograms are
+# deliberately *not* seeded: a fake `.record(0)` would inject a permanent "one
+# observation of 0 seconds" data point that skews histogram_quantile() and
+# rate(_sum)/rate(_count) (average latency) from the very first scrape. The
+# two histograms simply won't appear on /metrics until real recording is
+# wired in — see the TODOs above.
+intent_classification_count.add(0)
+rag_retrieval_count.add(0)
