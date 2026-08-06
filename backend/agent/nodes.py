@@ -6,6 +6,7 @@ from rag.retriever import retrieve_context
 from mcp_servers.weather_server import get_weather
 from mcp_servers.flight_server import search_flights
 from mcp_servers.hotel_server import search_hotels
+from observability.metrics import intent_classification_count
 
 load_dotenv()
 
@@ -32,9 +33,17 @@ def classify_intent(state: AgentState) -> AgentState:
 
     response = get_model().invoke(prompt)
     raw_intent = response.text.strip().lower()
-    intent = next(
-        (valid for valid in valid_intents if valid in raw_intent),
-        "general",  # どれにも当たらなければ "general" にフォールバック
+    matched = next((valid for valid in valid_intents if valid in raw_intent), None)
+
+    # どれにも当たらなければ "general" にフォールバック。
+    # `fallback` ラベルで「本当に一般質問だった general」と「分類器が壊れて
+    # 落ちてきた general」を区別する — 後者は解決後の intent だけでは
+    # 見分けがつかず、分類器の劣化を見逃す原因になる。
+    fallback = matched is None
+    intent = matched if matched is not None else "general"
+
+    intent_classification_count.add(
+        1, {"intent": intent, "fallback": "true" if fallback else "false"}
     )
 
     return {**state, "intent": intent}
