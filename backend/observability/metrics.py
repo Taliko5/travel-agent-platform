@@ -16,10 +16,11 @@ from opentelemetry import metrics
 meter = metrics.get_meter("travel-agent-backend")
 
 # /chat request latency.
-# TODO (user): define labels and add .record() calls in the POST /chat route
-# handler in backend/api/main.py (wrap the graph.ainvoke call). Bucket
-# boundaries below are provisional starting values — tune them as part of
-# this work once real latency data is available.
+# Recorded in the POST /chat route handler in backend/api/main.py, in a
+# `finally` block so failed requests are measured too.
+# Labels: intent (4 values + "unknown"), status (ok|error) — 10 series max.
+# Bucket boundaries are provisional starting values; tune them once real
+# latency data has accumulated.
 chat_request_duration = meter.create_histogram(
     name="chat_request_duration_seconds",
     unit="s",
@@ -27,9 +28,15 @@ chat_request_duration = meter.create_histogram(
     explicit_bucket_boundaries_advisory=[0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0],
 )
 
-# Classified intent distribution.
-# TODO (user): define labels/buckets and add .add() calls in classify_intent in
-# backend/agent/nodes.py, labelled by the resolved intent.
+# Classifier health, not intent distribution.
+# Recorded in classify_intent in backend/agent/nodes.py.
+# Labels: intent, fallback (true|false).
+# Intent *distribution* is already available from
+# chat_request_duration_seconds_count{intent=...}; what this counter adds is
+# the `fallback` dimension — how often the LLM returned something outside the
+# allowlist and got silently coerced to "general". That signal is invisible in
+# the resolved-intent label, and without it a rising "general" share can't be
+# told apart from a degrading classifier.
 intent_classification_count = meter.create_counter(
     name="intent_classification_total",
     unit="1",

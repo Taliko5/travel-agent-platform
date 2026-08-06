@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 
 import prometheus_client
 from fastapi import FastAPI
@@ -51,9 +52,9 @@ meter_provider = MeterProvider(
 )
 set_meter_provider(meter_provider)
 
-# Imported after set_meter_provider so the placeholder instruments register
-# against the configured MeterProvider (exposed via /metrics).
-from observability import metrics  # noqa: E402,F401
+# Imported after set_meter_provider so the instruments register against the
+# configured MeterProvider (exposed via /metrics).
+from observability import metrics  # noqa: E402
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -99,15 +100,37 @@ def root():
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     logger.info("chat request received")
-    result = await graph.ainvoke(
-        {
-            "user_input": request.message,
-            "intent": None,
-            "response": None,
-            "flight_data": None,
-            "weather_data": None,
-            "hotel_data": None,
-        },
-        config={"callbacks": [otel_callback_handler]},
-    )
-    return ChatResponse(intent=result["intent"], response=result["response"])
+
+    # Recorded in `finally` so failed requests are measured too — a request
+    # that times out or raises is exactly the one whose latency matters.
+    # `intent` is only known after the graph runs, so the error path falls
+    # back to "unknown" rather than dropping the observation.
+    started = time.perf_counter()
+    intent = "unknown"
+    status = "error"
+    try:
+        result = await graph.ainvoke(
+            {
+                "user_input": request.message,
+                "intent": None,
+                "response": None,
+                "flight_data": None,
+                "weather_data": None,
+                "hotel_data": None,
+            },
+            config={"callbacks": [otel_callback_handler]},
+        )
+        intent = result.get("intent") or "unknown"
+        response = ChatResponse(intent=result["intent"], response=result["response"])
+        # Set last: response-model validation can still fail above.
+        status = "ok"
+        return response
+    finally:
+        duration = time.perf_counter() - started
+        metrics.chat_request_duration.record(
+            duration, {"intent": intent, "status": status}
+        )
+        logger.info(
+            "chat request completed",
+            extra={"intent": intent, "status": status, "duration_seconds": duration},
+        )
