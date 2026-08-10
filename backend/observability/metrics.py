@@ -25,7 +25,7 @@ chat_request_duration = meter.create_histogram(
     name="chat_request_duration_seconds",
     unit="s",
     description="End-to-end latency of POST /chat requests.",
-    explicit_bucket_boundaries_advisory=[0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0],
+    explicit_bucket_boundaries_advisory=[0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 7.0, 10.0, 20.0, 60.0, 120.0],
 )
 
 # Classifier health, not intent distribution.
@@ -52,7 +52,7 @@ llm_call_duration = meter.create_histogram(
     name="llm_call_duration_seconds",
     unit="s",
     description="Duration of individual LLM (Gemini) calls.",
-    explicit_bucket_boundaries_advisory=[0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+    explicit_bucket_boundaries_advisory=[0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 7.0, 10.0, 20.0, 60.0, 120.0],
 )
 
 # RAG retrieval rate.
