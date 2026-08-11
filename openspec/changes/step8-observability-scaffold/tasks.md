@@ -55,6 +55,27 @@
 ## 9. User-Owned Follow-On Work (reference only — not implemented by this change)
 
 - [x] Define final metric names, label sets, and histogram bucket boundaries for the four key metrics; wire the actual `.record()`/`.add()` calls into the recording call sites marked in Section 5.
+  - Partially done: `chat_request_duration_seconds` and `intent_classification_total` are recorded; `llm_call_duration_seconds` and `rag_retrieval_total` are declared but have no call sites, so they are absent from `/metrics` by design.
+- **Re-tune `chat_request_duration_seconds` bucket boundaries** (blocked on nothing; deliberately excluded from the 9-c/9-d dashboard change because `backend/observability/metrics.py` is application code).
+  - Evidence, measured 2026-08-11 over 127 requests via `sum by (le) (chat_request_duration_seconds_bucket)`:
+
+    | `le` | cumulative | in that bucket |
+    |---|---|---|
+    | 0.5 / 1.0 / 1.5 / 2.0 / 3.0 / 5.0 | 0 | 0 |
+    | 7.0 | 46 | 46 |
+    | 10.0 | 121 | **75** |
+    | 20.0 | 127 | 6 |
+    | 60.0 / 120.0 / +Inf | 127 | 0 |
+
+    Nine of twelve buckets are empty. Eight of the eleven boundaries sit where nothing has ever been observed, while the 7.0–10.0s region holding 75 of 127 observations is undivided. Consequently p50 (7.70s), p90 (9.73s) and p95 (9.99s) all resolve inside that one bucket — three cuts through a single linear interpolation, not three measurements.
+  - Agreed replacement: `[0.5, 1.0, 2.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 12.0, 15.0, 20.0, 30.0, 60.0]` (11 boundaries → 14; ~120 → ~150 series at `intent` × `status` = 10 label combinations).
+    - `0.5 / 1.0 / 2.0` are retained for the **error path**, not the success path. They are empty today because nothing has failed yet, not because fast requests do not exist; quota (429) and validation failures return in milliseconds.
+    - `5.0`–`10.0` at 1s steps: 121 of 127 observations land here, so the resolution budget goes here. 1s is the floor — Gemini's run-to-run jitter is on the order of a second, and finer buckets would be false precision.
+    - `12 / 15 / 20` subdivide the weather tail; `(10, 20]` currently holds 6 observations across a 10s-wide bucket, which is where p99's multi-second error comes from.
+    - Dropped: `1.5` and `3.0` (no data, no rationale) and `120.0` (past 60s the request is already pathological; distinguishing 90s from 110s has no value, and `+Inf` still catches it).
+  - Expected outcome: p50, p95 and p99 land in three *different* buckets, which is what does not happen today.
+  - `llm_call_duration_seconds` currently copies these same boundaries verbatim. It must not copy the new ones either — it measures a *component* of a `/chat` request, so it needs its own values. Do not guess them: when wiring its recording call sites, start with a coarse log-spaced set (e.g. `[0.1, 0.25, 0.5, 1, 2, 3, 5, 7, 10, 20]`), measure the distribution the same way, then re-tune once.
+  - Panel 6 of `travel-agent-overview.json` (latency distribution heatmap) exists to make this re-checkable after the change lands.
 - Decide and apply real span names/attributes for the events `OTelCallbackHandler` (Section 4) receives (e.g. what request/response data belongs on the `classify_intent` chain span vs. the `generate_response` chain span vs. the nested LLM-call span within it).
 - Build Grafana dashboards in `observability/grafana/dashboards/` visualizing `/chat` latency percentiles, intent distribution, LLM call duration, and RAG retrieval rate.
 - Get the pipeline showing real data end-to-end via `docker-compose up` and debug any gaps (missing spans, empty Prometheus targets, no Grafana data, missing trace/log correlation) collaboratively rather than solo.
