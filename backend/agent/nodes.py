@@ -35,10 +35,10 @@ def classify_intent(state: AgentState) -> AgentState:
     raw_intent = response.text.strip().lower()
     matched = next((valid for valid in valid_intents if valid in raw_intent), None)
 
-    # どれにも当たらなければ "general" にフォールバック。
-    # `fallback` ラベルで「本当に一般質問だった general」と「分類器が壊れて
-    # 落ちてきた general」を区別する — 後者は解決後の intent だけでは
-    # 見分けがつかず、分類器の劣化を見逃す原因になる。
+    # Fall back to "general" when the response matches none of the valid intents.
+    # The `fallback` label separates a genuine general question from a "general"
+    # produced by a failing classifier — the two are indistinguishable from the
+    # resolved intent alone, which is how classifier degradation goes unnoticed.
     fallback = matched is None
     intent = matched if matched is not None else "general"
 
