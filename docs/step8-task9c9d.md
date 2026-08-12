@@ -43,11 +43,19 @@ Requirements:
   - `hotel` → `call_hotel_tool` (e.g. "Find me a hotel in Lima")
   - `general` → `retrieve_context` (e.g. "What should I know before visiting Abu Dhabi?")
   - Include at least two prompt variants per branch so the data isn't perfectly uniform
-- CLI arguments: `--requests` (default 40), `--concurrency` (default 2),
-  `--delay` (seconds between requests per worker, default 1.0), `--base-url`
+- CLI arguments: `--requests` (default 60), `--concurrency` (default 1),
+  `--delay` (seconds between requests per worker, default 6.0), `--base-url`
 - **Rate limiting matters**: the backend calls the Gemini free tier, which has a
   requests-per-minute cap. Default settings must stay conservative. Document the risk in the
   script's module docstring and in `--help`.
+  - These defaults are not arbitrary. `--concurrency 2 --delay 1.0` works out to ~120
+    requests/minute, which the free tier rejects; the defaults above are ~10 requests/minute.
+    That rate was run by hand on 2026-08-11 — 60 requests at 6s intervals, all `200`, no
+    throttling — and it is what produced the 127-observation dataset the panel 6 bucket
+    analysis is based on. Do not raise these defaults; `--delay` and `--concurrency` exist so
+    a caller with a paid key can opt into more load explicitly.
+  - A single run at these defaults takes about six minutes. Say so in `--help`, so nobody
+    assumes the script has hung.
 - Print a running summary: per-intent counts, HTTP status counts, min/mean/max client-observed
   latency, and total wall-clock time. On any non-200 response, print the status and body so
   quota errors are obvious rather than silently skewing the metrics.
