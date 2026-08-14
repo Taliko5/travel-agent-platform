@@ -1,0 +1,26 @@
+# Explicit ruff configuration to freeze the currently-enforced rule set and
+# formatting behaviour, rather than inheriting whatever ruff's release-to-release
+# defaults happen to be.
+#
+# Ruff 0.16.0 (2026-07-23) changed the default lint rule set from 59 rules to 413
+# and dropped 18 rules -- including E402 -- without recording the removal in
+# BREAKING_CHANGES.md. Without this file, `ruff check backend/` would go from 0
+# errors (pinned ruff==0.15.20) to 32 errors on an unpinned/upgraded ruff, purely
+# from the default changing underneath us.
+#
+# `select` below reproduces ruff 0.15.20's own default rule set explicitly, so an
+# eventual ruff version bump is a boring, reviewable diff instead of a silent
+# behaviour change.
+target-version = "py313"
+line-length = 88
+
+[lint]
+# 0.15.20's default selection. E402 MUST stay enabled: backend/api/main.py,
+# backend/rag/ingest.py, and backend/rag/retriever.py carry `# noqa: E402`
+# directives that document import ordering which is a functional requirement
+# (in main.py, `from observability import metrics` must execute after
+# `set_meter_provider(meter_provider)` or the instruments register against the
+# wrong MeterProvider and vanish from /metrics). If E402 is off, those noqa
+# directives become RUF100 "unused noqa" findings, and `--fix` would delete the
+# only marker that the ordering is deliberate.
+select = ["E4", "E7", "E9", "F"]
