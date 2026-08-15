@@ -91,15 +91,15 @@
   - Full specification: **`docs/step8-task9c9d.md`**. That document is authoritative for the panel expressions, the panel descriptions, and the measurement figures quoted in them. Do not restate any of it here — the checklist below tracks progress only, and a second copy of the numbers is how the 2026-08-11 / 2026-08-12 discrepancy in this section arose.
   - [x] `scripts/generate_load.py` (Task 1) — committed. `rate()` needs several scrape intervals of data before the panels read as anything but broken, so this is a prerequisite for verifying any expression.
   - [x] Verify all eight PromQL expressions in the Prometheus expression browser (panels 1–6; panel 1 contributes three) — all eight returned non-empty.
-  - [ ] `observability/grafana/dashboards/travel-agent-overview.json` (Task 2) — raw dashboard model, `uid: travel-agent-overview`, `id: null`, datasource referenced through a `${datasource}` template variable:
-    - [ ] Panel 1 — `/chat` p50 / p95 / p99, successful requests only (`status="ok"`), literal legends
-    - [ ] Panel 2 — p95 by intent; description quotes the `_sum / _count` figures, **not** the interpolated "19s"
-    - [ ] Panel 3 — request rate by intent, from the histogram's `_count` series
-    - [ ] Panel 4 — error rate; `or vector(0)` wraps the numerator only. **Expression frozen — verified against live data, not open for revision.**
-    - [ ] Panel 5 — intent classifier fallback rate; same numerator-only guard, same reason. **Expression frozen.**
-    - [ ] Panel 6 — latency distribution heatmap; `"format": "heatmap"` on the target and `"calculate": false` in panel options are both mandatory
-    - [ ] Panel 7 — text panel covering the declared-but-unrecorded instruments
-  - [ ] Update `observability/grafana/dashboards/README.md` to describe the dashboard that now exists and how to add more
+  - [x] `observability/grafana/dashboards/travel-agent-overview.json` (Task 2) — raw dashboard model, `uid: travel-agent-overview`, `id: null`, datasource referenced through a `${datasource}` template variable:
+    - [x] Panel 1 — `/chat` p50 / p95 / p99, successful requests only (`status="ok"`), literal legends
+    - [x] Panel 2 — p95 by intent; description quotes the `_sum / _count` figures, **not** the interpolated "19s"
+    - [x] Panel 3 — request rate by intent, from the histogram's `_count` series
+    - [x] Panel 4 — error rate; `or vector(0)` wraps the numerator only. **Expression frozen — verified against live data, not open for revision.**
+    - [x] Panel 5 — intent classifier fallback rate; same numerator-only guard, same reason. **Expression frozen.**
+    - [x] Panel 6 — latency distribution heatmap; `"format": "heatmap"` on the target and `"calculate": false` in panel options are both mandatory
+    - [x] Panel 7 — text panel covering the declared-but-unrecorded instruments
+  - [x] Update `observability/grafana/dashboards/README.md` to describe the dashboard that now exists and how to add more
   - [ ] Confirm Grafana actually provisions the file (restart Grafana, then check its logs for the read from `/etc/grafana/dashboards` with no error)
 - **9-d — Get the pipeline showing real data end-to-end** via `docker-compose up` and debug any gaps (missing spans, empty Prometheus targets, no Grafana data, missing trace/log correlation) collaboratively rather than solo.
   - [ ] Record the observed results as a "Verified End-to-End" section in `docs/step8.md` (Task 3 of `docs/step8-task9c9d.md`) — not started. Blocked in practice until the host's DNS / self-signed-certificate failures are fixed, since a re-run against the current environment reproduces the same contaminated dataset.
