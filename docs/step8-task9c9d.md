@@ -98,6 +98,31 @@ replacement — then stop and wait.
 Panel 4 is the exception: its expression and its `or vector(0)` placement have already been
 reasoned through and are not open for revision. Verify it returns data; do not redesign it.
 
+### Measurement provenance
+
+Every figure quoted in the panel descriptions below comes from **one load run on 2026-08-12**:
+60 requests at the `scripts/generate_load.py` defaults, read back from Prometheus' TSDB. They
+replace an earlier set of 2026-08-11 figures, which were measured against a container instance
+that no longer exists and could not be reproduced. Do not reinstate the old numbers.
+
+Two caveats travel with these figures and must be repeated in any panel description that quotes
+them:
+
+- **The host's Docker networking was unhealthy during the run.** Six of the 60 requests failed
+  with `httpx.ConnectError: Temporary failure in name resolution` and
+  `[SSL: CERTIFICATE_VERIFY_FAILED] self-signed certificate` on the backend's outbound call to
+  Gemini. One retried inside `google_genai`'s tenacity loop for 1025.74s before giving up,
+  because `backend/api/main.py` puts no deadline on `await graph.ainvoke(...)`. Prometheus' `up`
+  series also has three genuine sample gaps (705s, 615s, and 1950s — the last well after the run
+  had ended). Everything in the error tail — the `20.0`, `60.0` and `+Inf` buckets — therefore
+  describes an infrastructure incident, not the application.
+- **The 54 successful requests are unaffected.** Panels 1, 2 and 3 read the success path, and
+  those figures are usable as they stand.
+
+Quantiles are quoted below as ranges across the run rather than as single points. At this request
+volume a `rate(...[5m])` window holds only ~20 observations, so the quantile moves as the window
+slides, and a single request can relocate it into the next bucket.
+
 1. **`/chat` p50 / p95 / p99 latency — successful requests** (timeseries, unit `s`)
    Three queries, legends `p50` / `p95` / `p99`:
    ```
@@ -117,13 +142,19 @@ reasoned through and are not open for revision. Verify it returns data; do not r
    `histogram_quantile` then consumes it, so the result carries no labels at all — there is
    nothing for `{{...}}` to interpolate.
 
-   Do **not** add a p90 series. Measured on 2026-08-11, p50 (7.70s), p90 (9.73s) and p95 (9.99s)
-   all resolve inside the same `7.0–10.0` bucket, so a fourth line would be a fourth cut through
-   one linear interpolation, carrying no additional information. See panel 6.
+   Do **not** add a p90 series. Measured 2026-08-12, p50 ranged 6.34–8.92s and p95 ranged
+   9.53–19.0s across the run. The p50 range straddles the `5.0–7.0` and `7.0–10.0` buckets; the
+   p95 range straddles `7.0–10.0` and `10.0–20.0`. Every quantile this panel can draw is a cut
+   through one of two linear interpolations, so a fourth line would add a fourth cut, not a
+   fourth measurement. See panel 6.
 
-   The panel description must note that p99 is sample-sensitive: at the request volumes this
-   project generates (~127 observations per load run) p99 is decided by the second-slowest single
-   request and currently resolves inside a 10s-wide bucket. Small p99 movements are not signal.
+   The panel description must note that p99 is sample-sensitive. Measured 2026-08-12, p99 ranged
+   9.91–19.8s. Its lower end is real — most successful requests cluster just under the `10.0`
+   boundary. Its upper end is not: it comes entirely from two observations (12.18s and 13.15s)
+   being interpolated across the 10s-wide `10.0–20.0` bucket. At 54 successful observations per
+   run and roughly 20 per `rate()` window, p99 is decided by a single request. Small p99
+   movements are not signal, and large ones may still be bucket-width artefacts rather than
+   latency changes.
 
 2. **p95 latency by intent — successful requests** (timeseries, unit `s`, legend `{{intent}}`)
    ```
@@ -131,14 +162,32 @@ reasoned through and are not open for revision. Verify it returns data; do not r
    ```
    Same `{status="ok"}` reasoning as panel 1.
 
-   Measured on 2026-08-11: `weather` p95 ≈ 19s, the other three intents ≈ 9–10s. This is an
-   observation, not a prediction — put the figures and the date in the panel description so the
-   next reader can tell the difference. The cause is that `call_weather_tool` makes an extra LLM
-   call to extract the city name before hitting Open-Meteo, and that call shows up as roughly a
-   doubling.
+   Measured 2026-08-12, from `_sum / _count` rather than from a quantile: `weather` averaged
+   8.60s per request (128.93s / 15), against 6.85s for `general` (82.21 / 12), 6.56s for
+   `transportation` (98.41 / 15) and 6.54s for `hotel` (78.46 / 12). That is roughly **1.3x**,
+   and the separation is real — the only two successful requests to exceed 10s (12.18s and
+   13.15s) were both `weather`, and no other intent produced one. The likely cause is that
+   `call_weather_tool` makes an extra LLM call to extract the city name before hitting
+   Open-Meteo. Put the figures and the date in the panel description so the next reader can tell
+   an observation from a prediction.
 
-   Note that the gap is in the *tail*, not the middle: only 6 of 127 observations exceeded 10s
-   overall, so weather's median also sits under 10s. It is weather's p95 that separates.
+   **Do not quote a "weather p95 ≈ 19s" figure.** An earlier version of this document did, and it
+   was an artefact rather than an observation: no `weather` request in the run took longer than
+   13.15s. The number arises because `histogram_quantile` interpolates linearly inside a bucket
+   and the boundaries jump from `10.0` straight to `20.0`. Per intent, a 5-minute window holds
+   about five `weather` observations; if one exceeds 10s, the p95 rank is `0.95 × 5 = 4.75`,
+   which falls between the cumulative counts at `le=10.0` (4) and `le=20.0` (5), so the result is
+   interpolated as `10.0 + 0.75 × 10.0 = 17.5s` — the same answer whether the true value was
+   12.2s or 19.9s.
+
+   The panel will keep drawing `weather` in the 17–19s range for exactly this reason. The panel
+   description must say that those values are bucket-width artefacts, that the real tail is
+   ~13s, and that the honest per-intent comparison comes from `_sum / _count`. This is the
+   clearest available demonstration of why panel 6 exists.
+
+   Note also that the gap is in the *tail*, not the middle: of 60 observations, 52 came in under
+   10s. Only 8 exceeded it, and 6 of those 8 were the failed requests described under
+   "Measurement provenance" — not slow successes.
 
 3. **Request rate by intent** (timeseries, unit `reqps`, legend `{{intent}}`)
    ```
@@ -197,25 +246,36 @@ reasoned through and are not open for revision. Verify it returns data; do not r
    This panel answers a different question from panels 1 and 2: not "how slow is it?" but
    "are the histogram bucket boundaries placed where the data actually is?"
 
-   **This is not a hypothesis — it was measured on 2026-08-11.** Over 127 requests, the
-   cumulative bucket counts were:
+   **This is not a hypothesis — it was measured 2026-08-12** and read back from Prometheus'
+   TSDB. Over 60 requests, the cumulative bucket counts were:
 
    | `le` | cumulative | observations in that bucket |
    |---|---|---|
    | 0.5 / 1.0 / 1.5 / 2.0 / 3.0 / 5.0 | 0 | 0 |
-   | 7.0 | 46 | 46 |
-   | 10.0 | 121 | **75** |
-   | 20.0 | 127 | 6 |
-   | 60.0 / 120.0 / +Inf | 127 | 0 |
+   | 7.0 | 28 | 28 |
+   | 10.0 | 52 | **24** |
+   | 20.0 | 54 | 2 |
+   | 60.0 | 59 | 5 |
+   | 120.0 | 59 | 0 |
+   | +Inf | 60 | 1 |
 
-   Nine of the twelve buckets are empty. `backend/observability/metrics.py` spends eight of its
-   eleven boundaries below 5.0s or above 20.0s, where nothing has ever been observed, and leaves
-   the 7.0–10.0s region — which holds 75 of 127 observations — undivided.
+   Seven of the twelve buckets are empty. The six boundaries below 5.0s hold nothing at all,
+   while 52 of the 60 observations — 87% — fall between 5.0s and 10.0s, a region
+   `backend/observability/metrics.py` divides with a single boundary at 7.0.
 
-   The consequence is that p50 (7.70s), p90 (9.73s) and p95 (9.99s) all resolve inside that same
-   single bucket. They are three cuts through one linear interpolation, not three measurements.
-   Bucket placement therefore determines how much of panels 1 and 2 is real, and no other panel
-   makes that visible.
+   The tail is emptier than the table suggests. The five observations in `20.0–60.0` and the one
+   past `120.0` are the failed requests described under "Measurement provenance", not application
+   latency; on a healthy stack those buckets would be empty too. Meanwhile `10.0–20.0` — which
+   holds the only two genuinely slow successes, at 12.18s and 13.15s — is ten seconds wide. That
+   width alone is what makes `histogram_quantile` report those two requests as a p95 near 17.5s,
+   and it is why an earlier version of this document asserted a "weather p95 ≈ 19s" that no
+   request ever produced. See panel 2.
+
+   The consequence is that p50 (measured range 6.34–8.92s) only ever crosses the `5.0–7.0` and
+   `7.0–10.0` boundaries, while p95 (9.53–19.0s) and p99 (9.91–19.8s) are decided by which side
+   of `10.0` one or two requests happen to land on. These are cuts through two linear
+   interpolations, not independent measurements. Bucket placement therefore determines how much
+   of panels 1 and 2 is real, and no other panel makes that visible.
 
    Do **not** re-tune the boundaries in this change — `metrics.py` is application code and is out
    of scope per the ground rules. Retuning is tracked separately, together with the remaining
