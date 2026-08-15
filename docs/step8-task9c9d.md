@@ -13,10 +13,18 @@ a separate step.
 
 ## Ground rules
 
-- **Do not modify application code.** `backend/agent/`, `backend/api/`, `backend/observability/`,
-  `backend/rag/`, `backend/mcp_servers/`, and `frontend/` are all out of scope here.
-  This change adds a load-generation script, dashboard JSON, and documentation only.
-- Do not change dependency versions or `docker-compose.yaml`.
+- **Do not modify application code.** One exception: you may run
+  `ruff format backend/` and let it fix the two pre-existing formatting violations —
+  a missing trailing newline in `backend/api/main.py` and two over-length lines in
+  `backend/observability/metrics.py`. Do **not** run `ruff check --fix`, and do not touch
+  histogram bucket boundaries or any other application logic in either file. Before finishing,
+  run `git diff` on those two files and confirm every changed line is whitespace-only — if it
+  isn't, revert and stop. Beyond this exception, `backend/agent/`, `backend/api/`,
+  `backend/observability/`, `backend/rag/`, `backend/mcp_servers/`, and `frontend/` are all out
+  of scope here. This change adds a load-generation script, dashboard JSON, and documentation,
+  plus that one whitespace-only formatting fix.
+- Do not change dependency versions (this includes `ruff==0.15.20`, pinned in `ruff.toml` —
+  do not upgrade it) or `docker-compose.yaml`.
 - The Grafana dashboard provisioning path is already wired
   (`observability/grafana/provisioning/dashboards/default.yml` → `/etc/grafana/dashboards`,
   bind-mounted from `observability/grafana/dashboards/`). Drop-in JSON is picked up
@@ -410,9 +418,12 @@ report instead).
 
 ## Wrap-up
 
-1. `ruff check backend/` and `ruff format --check backend/` must pass
+1. `ruff check backend/` and `ruff format --check backend/` must pass. Getting there requires
+   running `ruff format backend/` once, per the Ground rules exception above, which fixes the
+   two pre-existing violations in `backend/api/main.py` and `backend/observability/metrics.py`
    (`scripts/generate_load.py` should also be formatted with ruff)
-2. `cd backend && pytest tests/ -v` must pass — no application code changed, so this is a
+2. `cd backend && pytest tests/ -v` must pass — application logic is unchanged (the only
+   backend edits are the whitespace-only `ruff format` fixes permitted above), so this is a
    regression check only
 3. Update `observability/grafana/dashboards/README.md` to describe the dashboard that now
    exists and how to add more

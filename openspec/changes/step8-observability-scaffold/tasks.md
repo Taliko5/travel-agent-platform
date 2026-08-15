@@ -87,7 +87,21 @@
   - `llm_call_duration_seconds` currently copies these same boundaries verbatim. It must not copy the new ones either — it measures a *component* of a `/chat` request, so it needs its own values. Do not guess them: when wiring its recording call sites, start with a coarse log-spaced set (e.g. `[0.1, 0.25, 0.5, 1, 2, 3, 5, 7, 10, 20]`), measure the distribution the same way, then re-tune once.
   - Panel 6 of `travel-agent-overview.json` (latency distribution heatmap) exists to make this re-checkable after the change lands.
 - Decide and apply real span names/attributes for the events `OTelCallbackHandler` (Section 4) receives (e.g. what request/response data belongs on the `classify_intent` chain span vs. the `generate_response` chain span vs. the nested LLM-call span within it).
-- Build Grafana dashboards in `observability/grafana/dashboards/` visualizing `/chat` latency percentiles, intent distribution, LLM call duration, and RAG retrieval rate.
-- Get the pipeline showing real data end-to-end via `docker-compose up` and debug any gaps (missing spans, empty Prometheus targets, no Grafana data, missing trace/log correlation) collaboratively rather than solo.
+- **9-c — Build Grafana dashboards** in `observability/grafana/dashboards/` visualizing `/chat` latency percentiles, intent distribution, LLM call duration, and RAG retrieval rate.
+  - Full specification: **`docs/step8-task9c9d.md`**. That document is authoritative for the panel expressions, the panel descriptions, and the measurement figures quoted in them. Do not restate any of it here — the checklist below tracks progress only, and a second copy of the numbers is how the 2026-08-11 / 2026-08-12 discrepancy in this section arose.
+  - [x] `scripts/generate_load.py` (Task 1) — committed. `rate()` needs several scrape intervals of data before the panels read as anything but broken, so this is a prerequisite for verifying any expression.
+  - [x] Verify all eight PromQL expressions in the Prometheus expression browser (panels 1–6; panel 1 contributes three) — all eight returned non-empty.
+  - [ ] `observability/grafana/dashboards/travel-agent-overview.json` (Task 2) — raw dashboard model, `uid: travel-agent-overview`, `id: null`, datasource referenced through a `${datasource}` template variable:
+    - [ ] Panel 1 — `/chat` p50 / p95 / p99, successful requests only (`status="ok"`), literal legends
+    - [ ] Panel 2 — p95 by intent; description quotes the `_sum / _count` figures, **not** the interpolated "19s"
+    - [ ] Panel 3 — request rate by intent, from the histogram's `_count` series
+    - [ ] Panel 4 — error rate; `or vector(0)` wraps the numerator only. **Expression frozen — verified against live data, not open for revision.**
+    - [ ] Panel 5 — intent classifier fallback rate; same numerator-only guard, same reason. **Expression frozen.**
+    - [ ] Panel 6 — latency distribution heatmap; `"format": "heatmap"` on the target and `"calculate": false` in panel options are both mandatory
+    - [ ] Panel 7 — text panel covering the declared-but-unrecorded instruments
+  - [ ] Update `observability/grafana/dashboards/README.md` to describe the dashboard that now exists and how to add more
+  - [ ] Confirm Grafana actually provisions the file (restart Grafana, then check its logs for the read from `/etc/grafana/dashboards` with no error)
+- **9-d — Get the pipeline showing real data end-to-end** via `docker-compose up` and debug any gaps (missing spans, empty Prometheus targets, no Grafana data, missing trace/log correlation) collaboratively rather than solo.
+  - [ ] Record the observed results as a "Verified End-to-End" section in `docs/step8.md` (Task 3 of `docs/step8-task9c9d.md`) — not started. Blocked in practice until the host's DNS / self-signed-certificate failures are fixed, since a re-run against the current environment reproduces the same contaminated dataset.
 - Evaluate whether LangSmith is worth adopting alongside or instead of the hand-rolled node spans.
 - Scope and design actual CloudWatch log shipping as part of Step 9 (AWS Deployment), once an AWS account/log group exists to target — the structured JSON logging from Section 3 is the prep work for that.
