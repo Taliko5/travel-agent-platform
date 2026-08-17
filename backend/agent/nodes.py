@@ -10,6 +10,8 @@ from observability.metrics import intent_classification_count
 
 load_dotenv()
 
+VALID_INTENTS = ["transportation", "hotel", "weather", "general"]
+
 
 @lru_cache(maxsize=1)
 def get_model():
@@ -19,21 +21,19 @@ def get_model():
 def classify_intent(state: AgentState) -> AgentState:
     """Classify the user's input into a category."""
 
-    valid_intents = ["transportation", "hotel", "weather", "general"]
-
     prompt = f"""
     Classify the following user question into one of these categories:
-    {", ".join(valid_intents)}
+    {", ".join(VALID_INTENTS)}
 
-    
+
     question:{state["user_input"]}
-    
+
     Respond with only the category name, one word, lowercase.
     """
 
     response = get_model().invoke(prompt)
     raw_intent = response.text.strip().lower()
-    matched = next((valid for valid in valid_intents if valid in raw_intent), None)
+    matched = next((valid for valid in VALID_INTENTS if valid in raw_intent), None)
 
     # Fall back to "general" when the response matches none of the valid intents.
     # The `fallback` label separates a genuine general question from a "general"
