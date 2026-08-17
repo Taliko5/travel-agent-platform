@@ -52,9 +52,16 @@ meter_provider = MeterProvider(
 )
 set_meter_provider(meter_provider)
 
-# Imported after set_meter_provider so the instruments register against the
-# configured MeterProvider (exposed via /metrics).
 from observability import metrics  # noqa: E402
+
+# Seeding must happen via an explicit post-provider call, not import
+# position: any import of agent.graph (e.g. `build_graph` above) transitively
+# imports observability.metrics first, regardless of where it's imported here.
+# Instruments created before set_meter_provider() are OTel proxies, and
+# measurements recorded on a proxy before a provider is installed are dropped
+# silently — this call is what actually guarantees the seeded counters
+# register against the configured MeterProvider.
+metrics.seed_counters()
 
 configure_logging()
 logger = logging.getLogger(__name__)
