@@ -36,9 +36,7 @@ def classify_intent(state: AgentState) -> AgentState:
     matched = next((valid for valid in VALID_INTENTS if valid in raw_intent), None)
 
     # Fall back to "general" when the response matches none of the valid intents.
-    # The `fallback` label separates a genuine general question from a "general"
-    # produced by a failing classifier — the two are indistinguishable from the
-    # resolved intent alone, which is how classifier degradation goes unnoticed.
+    # Fallback-dimension rationale: docs/step8-task9c9d.md panel 5.
     fallback = matched is None
     intent = matched if matched is not None else "general"
 

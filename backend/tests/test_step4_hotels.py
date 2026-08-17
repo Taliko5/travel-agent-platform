@@ -11,9 +11,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 
-# ---------------------------------------------------------------------------
 # hotel_server.search_hotels
-# ---------------------------------------------------------------------------
 
 
 class TestSearchHotels:
@@ -113,9 +111,7 @@ class TestSearchHotels:
         assert "⭐⭐" in result  # Piece Hostel — 2 stars
 
 
-# ---------------------------------------------------------------------------
 # nodes.call_hotel_tool
-# ---------------------------------------------------------------------------
 
 
 class TestCallHotelToolNode:
@@ -189,9 +185,7 @@ class TestCallHotelToolNode:
         assert result["flight_data"] is None
 
 
-# ---------------------------------------------------------------------------
 # graph.route_by_intent — hotel routing
-# ---------------------------------------------------------------------------
 
 
 class TestRouteByIntentHotels:

@@ -43,15 +43,8 @@ chat_request_duration = meter.create_histogram(
     ],
 )
 
-# Classifier health, not intent distribution.
-# Recorded in classify_intent in backend/agent/nodes.py.
-# Labels: intent, fallback (true|false).
-# Intent *distribution* is already available from
-# chat_request_duration_seconds_count{intent=...}; what this counter adds is
-# the `fallback` dimension — how often the LLM returned something outside the
-# allowlist and got silently coerced to "general". That signal is invisible in
-# the resolved-intent label, and without it a rising "general" share can't be
-# told apart from a degrading classifier.
+# Classifier health, not intent distribution — fallback-dimension rationale in
+# docs/step8-task9c9d.md panels 3 & 5. Labels: intent, fallback (true|false).
 intent_classification_count = meter.create_counter(
     name="intent_classification_total",
     unit="1",
@@ -59,10 +52,7 @@ intent_classification_count = meter.create_counter(
 )
 
 # LLM call duration.
-# TODO (user): define labels and add .record() calls where get_model().invoke
-# is called in classify_intent / generate_response in backend/agent/nodes.py
-# (or record from OTelCallbackHandler on_llm_start/on_llm_end). Bucket
-# boundaries below are provisional starting values, not a final decision.
+# TODO: no recording call sites yet — tasks.md Section 9-a.
 llm_call_duration = meter.create_histogram(
     name="llm_call_duration_seconds",
     unit="s",
@@ -83,8 +73,7 @@ llm_call_duration = meter.create_histogram(
 )
 
 # RAG retrieval rate.
-# TODO (user): define labels/buckets and add .add() calls in retrieve_context_node
-# in backend/agent/nodes.py (or in rag/retriever.retrieve_context).
+# TODO: no recording call sites yet — tasks.md Section 9-a.
 rag_retrieval_count = meter.create_counter(
     name="rag_retrieval_total",
     unit="1",

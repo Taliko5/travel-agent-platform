@@ -11,9 +11,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _mock_geo_response(city_name: str, lat: float, lon: float) -> MagicMock:
@@ -42,9 +40,7 @@ def _mock_forecast_response(temp: float) -> MagicMock:
     return r
 
 
-# ---------------------------------------------------------------------------
 # weather_server.get_weather
-# ---------------------------------------------------------------------------
 
 
 class TestGetWeather:
@@ -124,9 +120,7 @@ class TestGetWeather:
         assert "17.3" in result
 
 
-# ---------------------------------------------------------------------------
 # nodes.call_weather_tool
-# ---------------------------------------------------------------------------
 
 
 class TestCallWeatherToolNode:
@@ -221,9 +215,7 @@ class TestCallWeatherToolNode:
             mock_get_weather.assert_called_once_with(city="Abu Dhabi")
 
 
-# ---------------------------------------------------------------------------
 # graph.route_by_intent
-# ---------------------------------------------------------------------------
 
 
 class TestRouteByIntent:
