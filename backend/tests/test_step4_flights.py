@@ -11,9 +11,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 
-# ---------------------------------------------------------------------------
 # flight_server.search_flights
-# ---------------------------------------------------------------------------
 
 
 class TestSearchFlights:
@@ -103,9 +101,7 @@ class TestSearchFlights:
         assert "(Showing sample results" not in result
 
 
-# ---------------------------------------------------------------------------
 # nodes.call_flight_tool
-# ---------------------------------------------------------------------------
 
 
 class TestCallFlightToolNode:
@@ -175,9 +171,7 @@ class TestCallFlightToolNode:
         assert result["weather_data"] is None
 
 
-# ---------------------------------------------------------------------------
 # graph.route_by_intent — flight routing
-# ---------------------------------------------------------------------------
 
 
 class TestRouteByIntentFlights:

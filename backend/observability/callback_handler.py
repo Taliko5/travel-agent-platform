@@ -47,9 +47,7 @@ class OTelCallbackHandler(BaseCallbackHandler):
         parent_span = self._spans.get(parent_run_id) if parent_run_id else None
         context = set_span_in_context(parent_span) if parent_span else None
         span = tracer.start_span(name, context=context)
-        # TODO (user): set real span attributes here (e.g. intent, model name,
-        # prompt/response sizes, tool args). The scaffold intentionally leaves
-        # span naming/attribute design to your metric/trace pass.
+        # TODO: span naming/attributes not decided — tasks.md Section 9.
         self._spans[run_id] = span
 
     def _end_span(self, run_id: UUID, error: BaseException | None = None) -> None:
