@@ -119,6 +119,33 @@ frontend/
 
 **CI path filtering** — `.github/workflows/ci.yml`'s `changes` job (`dorny/paths-filter`) gates `test`/`build-backend` on `backend/**` changes and `frontend`/`build-frontend` on `frontend/**` changes via per-step `if:` conditions, not job-level `if:`. This means a backend-only PR still shows `frontend`/`build-frontend` as green (steps no-op), not skipped/absent — required for branch-protection required-checks to stay satisfiable on every PR.
 
+## Comments
+
+Code carries the *what*. `docs/` and `openspec/` carry the *why*. A comment earns its place only
+when a reader needs something at that exact line that neither the code nor the docs can give them.
+
+Write a comment only when:
+
+- The reason for the code is not recoverable by reading it — an ordering requirement, a
+  workaround, a rate limit, a deliberate omission.
+- A value looks arbitrary but is not: timeouts, retry counts, bucket boundaries, magic numbers.
+
+Do not write a comment that:
+
+- Restates the line below it (`# increment the counter`).
+- Narrates structure (`# --- helpers ---`, `# imports`).
+- Duplicates a docstring, a type hint, or a test name.
+- Argues a design decision at length.
+
+**Two lines is the cap.** If the rationale needs more, it belongs in `docs/` or
+`openspec/changes/*/` — leave a one-line pointer instead:
+`# Deliberately unseeded — see tasks.md Section 9.` Never delete the rationale; move it and point
+at it. `TODO` comments follow the same budget: one line naming what is missing and where it is
+tracked (`# TODO: no recording call sites yet — tasks.md Section 9-a`).
+
+This rule does not apply to docstrings, or to tool directives such as `# noqa:`, `# type: ignore`
+and `# pragma:`. Never delete a `# noqa` to save a line — it changes lint behaviour.
+
 ## Docs
 
 - `docs/plan.md` — step-by-step roadmap and progress
