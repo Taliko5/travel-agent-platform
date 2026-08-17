@@ -77,10 +77,13 @@ class TestMetricsEndpoint:
         body = response.text
         assert "intent_classification_total" in body
         assert "rag_retrieval_total" in body
-        # Histograms are intentionally unseeded (Fix 1): the OTel Prometheus
-        # reader only exports an instrument once it has a data point, and no
-        # real .record() call sites exist yet.
-        assert "chat_request_duration_seconds" not in body
+        # chat_request_duration_seconds is NOT asserted absent here: /metrics
+        # is process-global, and test_api_main.py::TestChatEndpoint posts to
+        # /chat earlier in the same pytest session, so by the time this test
+        # runs the histogram has legitimately been populated. That makes
+        # "not in body" an order-dependent assertion, not a real guarantee.
+        # llm_call_duration_seconds stays asserted absent: nothing anywhere
+        # records it, so no test ordering can populate it.
         assert "llm_call_duration_seconds" not in body
 
 

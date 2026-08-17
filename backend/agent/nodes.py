@@ -10,6 +10,8 @@ from observability.metrics import intent_classification_count
 
 load_dotenv()
 
+VALID_INTENTS = ["transportation", "hotel", "weather", "general"]
+
 
 @lru_cache(maxsize=1)
 def get_model():
@@ -19,26 +21,24 @@ def get_model():
 def classify_intent(state: AgentState) -> AgentState:
     """Classify the user's input into a category."""
 
-    valid_intents = ["transportation", "hotel", "weather", "general"]
-
     prompt = f"""
     Classify the following user question into one of these categories:
-    {", ".join(valid_intents)}
+    {", ".join(VALID_INTENTS)}
 
-    
+
     question:{state["user_input"]}
-    
+
     Respond with only the category name, one word, lowercase.
     """
 
     response = get_model().invoke(prompt)
     raw_intent = response.text.strip().lower()
-    matched = next((valid for valid in valid_intents if valid in raw_intent), None)
+    matched = next((valid for valid in VALID_INTENTS if valid in raw_intent), None)
 
-    # どれにも当たらなければ "general" にフォールバック。
-    # `fallback` ラベルで「本当に一般質問だった general」と「分類器が壊れて
-    # 落ちてきた general」を区別する — 後者は解決後の intent だけでは
-    # 見分けがつかず、分類器の劣化を見逃す原因になる。
+    # Fall back to "general" when the response matches none of the valid intents.
+    # The `fallback` label separates a genuine general question from a "general"
+    # produced by a failing classifier — the two are indistinguishable from the
+    # resolved intent alone, which is how classifier degradation goes unnoticed.
     fallback = matched is None
     intent = matched if matched is not None else "general"
 
