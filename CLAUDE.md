@@ -137,8 +137,11 @@ Do not write a comment that:
 - Duplicates a docstring, a type hint, or a test name.
 - Argues a design decision at length.
 
-**Two lines is the cap.** If the rationale needs more, it belongs in `docs/` or
-`openspec/changes/*/` — leave a one-line pointer instead:
+**Two lines is the target, not a hard limit.** Running a line or two over is fine for a
+mechanical constraint that has no home in the docs — an import cycle, a library's actual
+callback behaviour, a test-client default. A six-line paragraph is not. If the comment is long
+enough to *argue* something, it belongs in `docs/` or `openspec/changes/*/` — leave a one-line
+pointer instead:
 `# Deliberately unseeded — see tasks.md Section 9.` Never delete the rationale; move it and point
 at it. `TODO` comments follow the same budget: one line naming what is missing and where it is
 tracked (`# TODO: no recording call sites yet — tasks.md Section 9-a`).
