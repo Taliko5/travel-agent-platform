@@ -1,0 +1,253 @@
+{
+  "id": null,
+  "uid": "travel-agent-overview",
+  "title": "Travel Agent — Overview",
+  "description": "chat/latency, intent distribution, error and fallback rates, and histogram bucket placement for the travel agent backend.",
+  "tags": ["travel-agent", "step8"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 0,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "/chat latency — p50 / p95 / p99 (successful requests)",
+      "description": "`/chat` latency for successful requests only (`status=\"ok\"`). This panel answers \"how slow is the working path\"; panel 4 owns \"is it broken\". Without the `status=\"ok\"` filter, a fast-failing outage (quota errors returning in milliseconds) would drag every quantile *down* at the exact moment the service breaks — the cost is that slow failures (timeouts) disappear from this panel, which is accepted because panel 4 still counts them.\n\nLegends are literal `p50`/`p95`/`p99`, not `{{...}}`: `sum by (le)` leaves only `le`, and `histogram_quantile` consumes it, so the result carries no labels to interpolate.\n\nNo p90 series. Measured 2026-08-12, p50 ranged 6.34–8.92s and p95 ranged 9.53–19.0s across the run. p50 only ever crosses the `5.0–7.0` and `7.0–10.0` bucket boundaries; p95 straddles `7.0–10.0` and `10.0–20.0`. Every quantile this panel can draw is a cut through one of two linear interpolations, not a fourth independent measurement — see panel 6.\n\np99 is sample-sensitive. Measured 2026-08-12, p99 ranged 9.91–19.8s. Its lower end is real — most successful requests cluster just under the `10.0` boundary. Its upper end is not: it comes entirely from two observations (12.18s and 13.15s) being interpolated across the 10s-wide `10.0–20.0` bucket. At 54 successful observations per run and roughly 20 per `rate()` window, p99 is decided by a single request. Small p99 movements are not signal, and large ones may still be bucket-width artefacts rather than latency changes.",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(chat_request_duration_seconds_bucket{status=\"ok\"}[5m])))",
+          "legendFormat": "p50",
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(chat_request_duration_seconds_bucket{status=\"ok\"}[5m])))",
+          "legendFormat": "p95",
+          "instant": false
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(chat_request_duration_seconds_bucket{status=\"ok\"}[5m])))",
+          "legendFormat": "p99",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "p95 latency by intent (successful requests)",
+      "description": "Same `status=\"ok\"` reasoning as panel 1.\n\n**Do not read the ~17–19s `weather` line as an observed latency.** It is a linear-interpolation artefact of the `10.0→20.0` histogram bucket being ten seconds wide — no `weather` request in the measured run exceeded 13.15s. A 5-minute window holds about five `weather` observations; when one exceeds 10s the p95 rank is `0.95 × 5 = 4.75`, which falls between the cumulative counts at `le=10.0` (4) and `le=20.0` (5), interpolating to `10.0 + 0.75 × 10.0 = 17.5s` regardless of whether the true value was 12.2s or 19.9s. See panel 6.\n\nThe honest per-intent comparison comes from `_sum / _count`, measured 2026-08-12: weather 8.60s (128.93s / 15), general 6.85s (82.21s / 12), transportation 6.56s (98.41s / 15), hotel 6.54s (78.46s / 12) — roughly 1.3x. The separation is real: the only two successful requests to exceed 10s (12.18s and 13.15s) were both `weather`, and no other intent produced one. The likely cause is that `call_weather_tool` makes an extra LLM call to extract the city name before hitting Open-Meteo.\n\nThe gap is in the tail, not the middle: of 60 observations, 52 came in under 10s. Only 8 exceeded it, and 6 of those 8 were the failed requests described on panels 4/5 (a 2026-08-12 infrastructure incident), not slow successes.",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "histogram_quantile(0.95, sum by (le, intent) (rate(chat_request_duration_seconds_bucket{status=\"ok\"}[5m])))",
+          "legendFormat": "{{intent}}",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Request rate by intent",
+      "description": "Intent-distribution signal, derived from the `chat_request_duration_seconds` histogram's `_count` series — a separate intent counter would be redundant for distribution alone.",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (intent) (rate(chat_request_duration_seconds_count[5m]))",
+          "legendFormat": "{{intent}}",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Error rate",
+      "description": "The `or vector(0)` wraps the numerator only — deliberately. `status` is only ever recorded as `ok` or `error` (`backend/api/main.py`), and Prometheus does not create a series for a label value that has never occurred, so on a stack that has never errored `{status=\"error\"}` does not exist, the numerator is an empty vector, and an unguarded division yields nothing — \"No data\" during normal operation, the worst possible rendering for an error-rate panel. Wrapping the *whole* expression in `or vector(0)` instead would flatten the no-traffic case to a false \"0% errors\".\n\nReading the panel: a flat zero line means traffic is flowing and none of it failed — `0 / 0.5 = 0`, a real, computable zero. A gap means no traffic in the window at all — `0 / 0` is genuinely undefined, not a claim that something is broken.",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit" },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "(sum(rate(chat_request_duration_seconds_count{status=\"error\"}[5m])) or vector(0)) / sum(rate(chat_request_duration_seconds_count[5m]))",
+          "legendFormat": "error ratio",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Intent classifier fallback rate",
+      "description": "Fraction of requests where the LLM returned something outside the `valid_intents` allowlist in `classify_intent` and was silently coerced to `\"general\"`. A rise here means classifier degradation, which the resolved-intent label alone (panel 3) cannot show.\n\nThe numerator-only `or vector(0)` is the same fix as panel 4, for the same reason: until the classifier fails once, no series carries `fallback=\"true\"`, so an unguarded numerator is an empty vector and the panel would read \"No data\" for as long as the classifier is healthy — the opposite of what a degradation panel should do on the healthy path. This holds even if `intent_classification_total` is later pre-seeded across all label combinations (tracked in `tasks.md` Section 9); the dashboard should not depend on that application-side invariant to render correctly.\n\nSame gap-vs-zero semantics as panel 4: a flat zero line means requests were classified and none fell back; a gap means no classification traffic in the window, ratio undefined.",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit" },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "(sum(rate(intent_classification_total{fallback=\"true\"}[5m])) or vector(0)) / sum(rate(intent_classification_total[5m]))",
+          "legendFormat": "fallback ratio",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "heatmap",
+      "title": "Latency distribution heatmap",
+      "description": "Not \"how slow is it\" (panels 1–2) but \"are the histogram bucket boundaries placed where the data actually is?\"\n\nMeasured 2026-08-12 over 60 requests, cumulative bucket counts: le=0.5/1.0/1.5/2.0/3.0/5.0 → 0; le=7.0 → 28 (28 in-bucket); le=10.0 → 52 (24 in-bucket); le=20.0 → 54 (2); le=60.0 → 59 (5); le=120.0 → 59 (0); +Inf → 60 (1). Seven of the twelve buckets are empty. The six boundaries below 5.0s hold nothing at all, while 52 of 60 observations (87%) fall between 5.0s and 10.0s — a region `backend/observability/metrics.py` divides with a single boundary at 7.0.\n\nThe tail is emptier than it looks: the five observations in `20.0–60.0` and the one past `120.0` are the failed requests from the 2026-08-12 infrastructure incident (DNS/TLS failures on the backend's outbound Gemini calls — one retried for 1025.74s because `await graph.ainvoke(...)` has no deadline), not application latency; on a healthy stack those buckets would be empty too. Meanwhile `10.0–20.0` — which holds the only two genuinely slow successes, at 12.18s and 13.15s — is ten seconds wide. That width alone is what makes `histogram_quantile` report those two requests as a p95 near 17.5s on panel 2, not a real ~19s weather latency.\n\nConsequence: p50 (measured range 6.34–8.92s) only ever crosses the `5.0–7.0` and `7.0–10.0` boundaries, while p95 (9.53–19.0s) and p99 (9.91–19.8s) are decided by which side of `10.0` one or two requests happen to land on — cuts through linear interpolation, not independent measurements. Bucket boundary re-tuning is out of scope for this change (`metrics.py` is application code — tracked separately in `tasks.md` Section 9); this panel exists so the new boundaries can be re-checked after that change lands, without an ad-hoc query.\n\nWhat to look for: rows that never take on colour are wasted boundaries, and a single dark row holding most observations means that region needs to be subdivided.",
+      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "calculate": false,
+        "yAxis": {
+          "unit": "s"
+        },
+        "color": {
+          "mode": "scheme",
+          "scheme": "Spectral",
+          "exponent": 0.5,
+          "steps": 128,
+          "reverse": false
+        },
+        "cellGap": 1,
+        "tooltip": {
+          "show": true,
+          "yHistogram": false
+        },
+        "legend": {
+          "show": true
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (le) (rate(chat_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "{{le}}",
+          "format": "heatmap",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "text",
+      "title": "Declared-but-unrecorded instruments",
+      "gridPos": { "x": 0, "y": 33, "w": 24, "h": 6 },
+      "options": {
+        "mode": "markdown",
+        "content": "## Declared but not yet recorded\n\n`llm_call_duration_seconds` and `rag_retrieval_total` are declared in `backend/observability/metrics.py` but have no `.record()`/`.add()` call sites yet, so they are absent from `/metrics`. This is the remaining Section 9-a work (see `openspec/changes/step8-observability-scaffold/tasks.md`), not a bug in this dashboard.\n\n`rag_retrieval_total` is *not* missing for lack of seeding — `metrics.py` does call `rag_retrieval_count.add(0)`, but that seed is silently discarded (an import-order issue: the counter is created before `set_meter_provider()` runs; see `tasks.md` Section 9 for the root cause and the agreed fix). The accurate statement is simply that these two instruments have no recording call sites yet.\n\nSeparately: **no** application metric appears on `/metrics` at all until the first `/chat` request after a restart. On a freshly restarted backend with no traffic, `/metrics` returns only the ten default `python_*` / `process_*` series. This is expected, not a sign the instrumentation is broken."
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": []
+    }
+  ]
+}

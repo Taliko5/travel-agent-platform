@@ -13,10 +13,18 @@ a separate step.
 
 ## Ground rules
 
-- **Do not modify application code.** `backend/agent/`, `backend/api/`, `backend/observability/`,
-  `backend/rag/`, `backend/mcp_servers/`, and `frontend/` are all out of scope here.
-  This change adds a load-generation script, dashboard JSON, and documentation only.
-- Do not change dependency versions or `docker-compose.yaml`.
+- **Do not modify application code.** One exception: you may run
+  `ruff format backend/` and let it fix the two pre-existing formatting violations —
+  a missing trailing newline in `backend/api/main.py` and two over-length lines in
+  `backend/observability/metrics.py`. Do **not** run `ruff check --fix`, and do not touch
+  histogram bucket boundaries or any other application logic in either file. Before finishing,
+  run `git diff` on those two files and confirm every changed line is whitespace-only — if it
+  isn't, revert and stop. Beyond this exception, `backend/agent/`, `backend/api/`,
+  `backend/observability/`, `backend/rag/`, `backend/mcp_servers/`, and `frontend/` are all out
+  of scope here. This change adds a load-generation script, dashboard JSON, and documentation,
+  plus that one whitespace-only formatting fix.
+- Do not change dependency versions (this includes `ruff==0.15.20`, pinned in `ruff.toml` —
+  do not upgrade it) or `docker-compose.yaml`.
 - The Grafana dashboard provisioning path is already wired
   (`observability/grafana/provisioning/dashboards/default.yml` → `/etc/grafana/dashboards`,
   bind-mounted from `observability/grafana/dashboards/`). Drop-in JSON is picked up
@@ -43,11 +51,19 @@ Requirements:
   - `hotel` → `call_hotel_tool` (e.g. "Find me a hotel in Lima")
   - `general` → `retrieve_context` (e.g. "What should I know before visiting Abu Dhabi?")
   - Include at least two prompt variants per branch so the data isn't perfectly uniform
-- CLI arguments: `--requests` (default 40), `--concurrency` (default 2),
-  `--delay` (seconds between requests per worker, default 1.0), `--base-url`
+- CLI arguments: `--requests` (default 60), `--concurrency` (default 1),
+  `--delay` (seconds between requests per worker, default 6.0), `--base-url`
 - **Rate limiting matters**: the backend calls the Gemini free tier, which has a
   requests-per-minute cap. Default settings must stay conservative. Document the risk in the
   script's module docstring and in `--help`.
+  - These defaults are not arbitrary. `--concurrency 2 --delay 1.0` works out to ~120
+    requests/minute, which the free tier rejects; the defaults above are ~10 requests/minute.
+    That rate was run by hand on 2026-08-11 — 60 requests at 6s intervals, all `200`, no
+    throttling — and it is what produced the 127-observation dataset the panel 6 bucket
+    analysis is based on. Do not raise these defaults; `--delay` and `--concurrency` exist so
+    a caller with a paid key can opt into more load explicitly.
+  - A single run at these defaults takes about six minutes. Say so in `--help`, so nobody
+    assumes the script has hung.
 - Print a running summary: per-intent counts, HTTP status counts, min/mean/max client-observed
   latency, and total wall-clock time. On any non-200 response, print the status and body so
   quota errors are obvious rather than silently skewing the metrics.
@@ -232,12 +248,25 @@ slides, and a single request can relocate it into the next bucket.
 
 5. **Intent classifier fallback rate** (timeseries, unit `percentunit`, legend `fallback ratio`)
    ```
-   sum(rate(intent_classification_total{fallback="true"}[5m]))
+   (sum(rate(intent_classification_total{fallback="true"}[5m])) or vector(0))
      / sum(rate(intent_classification_total[5m]))
    ```
    Panel description: fraction of requests where the LLM returned something outside the
    `valid_intents` allowlist in `classify_intent` and was silently coerced to `"general"`.
    A rise here means classifier degradation, which the resolved-intent label alone cannot show.
+
+   The numerator-only `or vector(0)` is the same fix as panel 4, for the same reason: until the
+   classifier fails once, no series carries `fallback="true"`, so an unguarded numerator is an
+   empty vector and the panel reads "No data" for as long as the classifier is healthy. A panel
+   whose job is to show classifier degradation must not go blank when the classifier is fine.
+
+   Apply this even if `intent_classification_total` is later pre-seeded across all label
+   combinations (see `tasks.md` Section 9). The dashboard should not depend on an
+   application-side invariant to render correctly.
+
+   Same gap-vs-zero semantics as panel 4: a flat zero line means "requests classified, none fell
+   back"; a gap means "no classification traffic in the window, ratio undefined". Describe it
+   that way in the panel description rather than in terms of `NaN`.
 
 6. **Latency distribution heatmap** (heatmap, y-axis unit `s`)
    ```
@@ -302,10 +331,19 @@ slides, and a single request can relocate it into the next bucket.
    to be subdivided.
 
 7. **Declared-but-unrecorded instruments** (text panel, not a graph)
-   A short markdown note stating that `llm_call_duration_seconds` and `rag_retrieval_total`
-   are declared in `backend/observability/metrics.py` but have no recording call sites yet, so
-   they are absent from `/metrics` by design. Reference the remaining Section 9-a work.
-   This prevents the next reader from filing "missing metrics" as a bug.
+   A short markdown note stating that `llm_call_duration_seconds` and `rag_retrieval_total` are
+   declared in `backend/observability/metrics.py` but have no recording call sites yet, so they
+   are absent from `/metrics`. Reference the remaining Section 9-a work. This prevents the next
+   reader from filing "missing metrics" as a bug.
+
+   Do not attribute their absence to "no seeding". `metrics.py` *does* call
+   `rag_retrieval_count.add(0)`, and that seed is silently discarded — see `tasks.md` Section 9
+   for the measured cause. The accurate statement is simply that these two instruments have no
+   recording call sites.
+
+   The note should also say that **no** application metric appears on `/metrics` until the first
+   `/chat` request after a restart, for the same underlying reason. Someone checking a freshly
+   restarted stack will otherwise conclude the instrumentation is broken.
 
 **Dashboard-level settings**: default time range `now-1h`, refresh `30s`,
 tags `["travel-agent", "step8"]`, timezone `browser`.
@@ -337,7 +375,19 @@ report instead).
 1. `curl -s localhost:8000/metrics/` returns 200 and contains
    `chat_request_duration_seconds_bucket` and `intent_classification_total`.
    Confirm `llm_call_duration_seconds` and `rag_retrieval_total` are **absent** — expected,
-   per Fix 1 (no seeding) and the unfinished Section 9-a work.
+   because neither has any recording call site yet (the unfinished Section 9-a work).
+
+   **Run this check *after* item 4's load generation, not before.** Measured 2026-08-11: on a
+   freshly restarted backend with no traffic, `/metrics` returns only the ten default
+   `python_*` / `process_*` series — no application metrics and no `target_info`. The first
+   `/chat` request makes `chat_request_duration_seconds` and `intent_classification_total`
+   appear. Checking this item on a cold stack will fail for a reason that has nothing to do
+   with what the item is testing.
+
+   Do **not** attribute `rag_retrieval_total`'s absence to "no seeding": `metrics.py` does seed
+   it with `.add(0)`, and the seed is discarded. Root cause and the agreed fix are recorded in
+   `tasks.md` Section 9; it is application code and out of scope here. Record what you observe
+   and move on.
 2. `curl -s -o /dev/null -w '%{http_code}' localhost:8000/metrics` returns `307`
    (no trailing slash), and `localhost:8000/metrics/` returns `200`.
    Note in the docs that `observability/prometheus.yml` uses `metrics_path: /metrics` and
@@ -368,9 +418,12 @@ report instead).
 
 ## Wrap-up
 
-1. `ruff check backend/` and `ruff format --check backend/` must pass
+1. `ruff check backend/` and `ruff format --check backend/` must pass. Getting there requires
+   running `ruff format backend/` once, per the Ground rules exception above, which fixes the
+   two pre-existing violations in `backend/api/main.py` and `backend/observability/metrics.py`
    (`scripts/generate_load.py` should also be formatted with ruff)
-2. `cd backend && pytest tests/ -v` must pass — no application code changed, so this is a
+2. `cd backend && pytest tests/ -v` must pass — application logic is unchanged (the only
+   backend edits are the whitespace-only `ruff format` fixes permitted above), so this is a
    regression check only
 3. Update `observability/grafana/dashboards/README.md` to describe the dashboard that now
    exists and how to add more
