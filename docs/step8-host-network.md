@@ -55,7 +55,13 @@ Whether those gaps cluster into a single window or scatter across the run is wha
 
 **Do not run `docker-compose down -v`.** It destroys `prometheus_data`, and with it the only surviving record of this run — the load generator's stdout was not saved.
 
+**This evidence expires.** The `prometheus` service in `docker-compose.yaml` passes no `command:`, so `prom/prometheus:latest` runs with its default `--storage.tsdb.retention.time=15d`. The 2026-08-12 samples therefore age out around **2026-08-27** on their own, with or without `down -v`. Nothing has to happen today, but the reconstruction above cannot be deferred indefinitely. If it needs to survive past that date, either raise the retention flag on the service or export the relevant series before then.
+
+**The load generator's log and Prometheus can disagree about the same request.** `scripts/generate_load.py` sets a 120-second client-side timeout on its HTTP calls — not a spec requirement, but there so that one pathological request cannot wedge an entire run. The backend keeps working after the client gives up, and `chat_request_duration_seconds` is recorded server-side in a `finally` block, so a repeat of the 1025-second case would show as a failed request at about 120s in the script's log and as about 1025s in Prometheus. Neither number is wrong; they measure different things.
+
 ## Next steps
+
+Order agreed 2026-08-18: recreate `scripts/generate_load.py` first — it was found missing from the repo, and step 4 below needs it. Then step 1, which is bounded by the retention date above. Steps 2 and 3 carry no deadline, but step 3 may have to wait for a failure window that has not recurred since 2026-08-12.
 
 1. Reconstruct the failure timeline from Prometheus, as above. Record the result in the findings log.
 2. Capture a healthy baseline from inside the backend container: `/etc/resolv.conf`, the addresses `generativelanguage.googleapis.com` resolves to, and the subject and issuer chain the TLS peer presents. Without a known-good picture, a capture taken during a failure cannot be read.
