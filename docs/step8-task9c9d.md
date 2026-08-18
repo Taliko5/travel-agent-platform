@@ -62,8 +62,12 @@ Requirements:
     throttling — and it is what produced the 127-observation dataset the panel 6 bucket
     analysis is based on. Do not raise these defaults; `--delay` and `--concurrency` exist so
     a caller with a paid key can opt into more load explicitly.
-  - A single run at these defaults takes about six minutes. Say so in `--help`, so nobody
-    assumes the script has hung.
+  - A single run at these defaults takes about **13** minutes, not six: `--delay` is the gap
+    *between* requests and each request itself takes roughly 7s, so 60 × (7 + 6) seconds.
+    (Corrected 2026-08-18. This line previously said six minutes, counting only the delays;
+    the figure had already been copied into the script's docstring, its `--help` and
+    `docs/step8.md` before it was caught.) Say so in `--help`, so nobody assumes the script
+    has hung.
 - Print a running summary: per-intent counts, HTTP status counts, min/mean/max client-observed
   latency, and total wall-clock time. On any non-200 response, print the status and body so
   quota errors are obvious rather than silently skewing the metrics.
