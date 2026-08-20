@@ -1,75 +1,107 @@
-# Step 8 — Host network failures (DNS / TLS) during load runs
+# Step 8 — Host network failures during the 2026-08-12 load run
 
-**Status: open, undiagnosed.** Last updated 2026-08-18.
+**Status: closed 2026-08-19**, with one residual that could not be explained and cannot now be investigated.
 
-This is the investigation record for the outbound-connectivity failures that contaminated the 2026-08-12 load run. It is the authoritative place for the symptoms, the evidence, and the hypotheses; Section 9 of `openspec/changes/step8-observability-scaffold/tasks.md` points here rather than restating any of it. It is not a runbook — nothing is diagnosed yet.
+## What this turned out to be
 
-## Why this blocks work
+The 2026-08-12 load run recorded six failed requests and three gaps in Prometheus' `up` series. That was read as a host DNS / self-signed-certificate fault, and 9-d was blocked behind fixing it. Direct evidence has since shown that most of that picture was macOS power management, and a controlled re-run on 2026-08-19 produced no failures at all.
 
-Task 9-d cannot be recorded against the current environment, because a re-run reproduces the same contaminated dataset. Re-running the load generator before this is fixed burns Gemini free-tier quota and produces another unusable run.
+**There is no configuration fault to fix.** What remains is one unexplained three-minute window, described at the end.
 
-## Symptoms
+## The 2026-08-12 run, reconstructed
 
-From the load run of 2026-08-12 — 60 requests at the load generator's defaults: 60 requests, concurrency 1, 6 seconds apart. (`scripts/generate_load.py` was subsequently found to be missing from the repo and is being recreated; the defaults quoted here come from its specification in `docs/step8-task9c9d.md`, Task 1.)
+Reconstructed from the `prometheus_data` volume on 2026-08-18. All times UTC; the host is Europe/Berlin, UTC+2.
 
-- **6 of the 60 requests failed.** The remaining 54 are uncontaminated.
-- Two error strings appeared, both raised on the backend container's outbound call to Gemini:
-  - `Temporary failure in name resolution` — getaddrinfo `EAI_AGAIN`
-  - `[SSL: CERTIFICATE_VERIFY_FAILED] self-signed certificate`
-- **One failed request ran for 1025.74 seconds** before giving up: `google_genai`'s internal `tenacity` retry loop kept going because `/chat` has no server-side deadline. That defect is an application bug and is tracked separately, not here.
-- Prometheus' `up` series has **three gaps in its samples** over the same period.
+```
+08:34:45  run starts (first success)
+   ...    eleven minutes of normal operation
+08:45:45  last success before the cluster (51st)
+08:46:30  failure 1     35.31 s
+08:47:00  failure 2     34.97 s
+08:47:45  failure 3     34.46 s
+08:48:30  failure 4     34.20 s
+08:49:00  failure 5     34.13 s
+09:06:15  failure 6   1025.74 s
+09:06:45  successes resume (53rd)
+09:22:00  run ends (54th success)
+```
 
-Consequences recorded elsewhere, repeated here only as pointers:
+No successful request completed between the failures. Start times are inferred as completion minus duration, so they carry the 15-second scrape granularity.
 
-- `intent_classification_total` sums to **54**, not 60 — the six failures died inside `classify_intent`, so no intent was recorded for them. Panels 4 and 5 consequently have different denominators.
-- The `chat_request_duration_seconds` histogram's `20.0` / `60.0` / `+Inf` buckets hold environmental failures, not application latency. That tail is not a property of the application.
+The five short failures took 34–35 seconds each, within a second of one another. Network variance does not produce that. It is the shape of a retry budget being exhausted and given up on, and it means all five shared one failure mode.
 
-## Environment
+## What was established, and how
 
-- macOS host running Docker Desktop; the compose stack runs there.
-- Home network behind an AVM FRITZ!Box. **No VPN, no corporate network** — confirmed 2026-08-18.
-- The failing traffic is *backend container → Gemini*, outbound through Docker. The load generator runs on the host and talks only to `http://localhost:8000`; it is not the thing failing to resolve.
+### Every gap in `up` is the machine sleeping
 
-## Ruled out
+`pmset -g log` covers both dates. All six gaps — three on 2026-08-12, three on 2026-08-18 — fall inside a sleep/wake pair. This is macOS' own record, not an inference.
 
-- **A constant man-in-the-middle proxy, or a misconfigured resolver.** Either would fail 100% of requests. 54 of 60 succeeded.
-- **A corporate TLS-inspection CA.** No VPN and no corporate network.
-- **Docker's embedded DNS resolver dropping UDP queries under concurrent load.** The run was serial — `--concurrency 1` with `--delay 6.0`, roughly 10 requests per minute. That cannot saturate a resolver.
+The decisive observation came first, from the TSDB itself: **no `up=0` sample exists anywhere, in any gap, on any date.** A running Prometheus that fails to reach its target records the failure as `up=0`. A total absence of samples means no scrape was attempted, so Prometheus was not executing. Sleeping the Mac suspends the Docker Desktop VM, and Prometheus with it.
 
-## Open hypotheses
+On 2026-08-18 the largest gap, 17:42:00Z–18:27:30Z, fell inside a period when nobody was at the machine.
 
-None of these is established. They are written down so evidence can be gathered *against* them rather than around them.
+### The 1025.74-second request was 999 seconds of sleep
 
-- **H1 — the failures fall inside one bounded outage window rather than scattering across the run.** The 1025-second retry means connectivity stayed broken for about 17 minutes for at least one request. If H1 holds, the 6-in-60 failure rate is an artefact of when the run overlapped the window, and the fault will not reproduce on demand.
-- **H2 — resolution sometimes returns a wrong answer rather than no answer.** Two different error strings in one run suggest a single cause upstream of TLS: if the connection lands on a host that is not Google, the certificate it presents will not validate, and a self-signed certificate is what a router or appliance admin interface typically serves. The mechanism is **not** established — a FRITZ!Box normally returns SERVFAIL rather than its own address. Confirming or killing H2 requires the resolved IP address and the peer certificate's subject and issuer captured at the moment of failure, which no existing log contains.
-- **H3 — Docker Desktop for Mac's VM lost DNS after a host network change or a sleep/wake cycle.** A known failure mode, and it fits a multi-minute window that ends only when something is restarted. Separating H3 from H1 requires knowing whether the window closed on its own.
+```
+10:49:09 +0200  (inferred)  request 6 starts
+10:49:16 +0200              Sleep 'Clamshell Sleep'  Using Batt (Charge:64%)  999 s
+11:05:55 +0200              Wake
+11:06:15 +0200  (recorded)  request 6 recorded as error
+```
 
-## Evidence still available
+The lid closed seven seconds after the request began, and it was recorded twenty seconds after wake. Of the 1025.74 seconds, 999 were spent suspended; roughly 27 seconds of work happened. The earlier account — that a `tenacity` retry loop ran unchecked for seventeen minutes — does not hold. Note also `Using Batt`: the run was on battery, where macOS power management is far more aggressive.
 
-The 2026-08-12 data is **still in the `prometheus_data` volume**, and the stack is up. The failure timeline can be reconstructed without re-running anything:
+### A controlled re-run is clean
 
-- `up{job="travel-agent-backend"}` across 2026-08-12 — where the three sample gaps sit and how wide each one is
-- `chat_request_duration_seconds_count` increments — when each request actually completed
+2026-08-19, on AC power, lid open, wrapped in `caffeinate`, which `pmset` confirms held for the full 12 m 26 s with no sleep or wake transition inside the window.
 
-Whether those gaps cluster into a single window or scatter across the run is what separates H1 from a per-request failure mode. **Do this before anything else**: it costs nothing, needs no working network, and it decides which of the hypotheses above is worth pursuing.
+```
+60 requests, 60 × HTTP 200, 0 failures
+wall-clock 745.2 s
+latency  min 5.22 s   mean 6.52 s   max 8.22 s
+per intent: general 15, hotel 15, transportation 15, weather 15
+```
 
-**Do not run `docker-compose down -v`.** It destroys `prometheus_data`, and with it the only surviving record of this run — the load generator's stdout was not saved.
+`docker-compose logs backend` for that window contains no line mentioning name resolution, certificates, retries or timeouts.
 
-**This evidence expires.** The `prometheus` service in `docker-compose.yaml` passes no `command:`, so `prom/prometheus:latest` runs with its default `--storage.tsdb.retention.time=15d`. The 2026-08-12 samples therefore age out around **2026-08-27** on their own, with or without `down -v`. Nothing has to happen today, but the reconstruction above cannot be deferred indefinitely. If it needs to survive past that date, either raise the retention flag on the service or export the relevant series before then.
+The wall-clock is exactly `60 × 6.52 + 59 × 6.0`, which is what the script should produce.
 
-**The load generator's log and Prometheus can disagree about the same request.** `scripts/generate_load.py` sets a 120-second client-side timeout on its HTTP calls — not a spec requirement, but there so that one pathological request cannot wedge an entire run. The backend keeps working after the client gives up, and `chat_request_duration_seconds` is recorded server-side in a `finally` block, so a repeat of the 1025-second case would show as a failed request at about 120s in the script's log and as about 1025s in Prometheus. Neither number is wrong; they measure different things.
+### Both external dependencies are healthy
 
-## Next steps
+Called directly from inside the backend container on 2026-08-19, both Open-Meteo endpoints returned HTTP 200 on three consecutive attempts, and a live `/chat` weather request returned a real temperature.
 
-Order agreed 2026-08-18: recreate `scripts/generate_load.py` first — it was found missing from the repo, and step 4 below needs it. Then step 1, which is bounded by the retention date above. Steps 2 and 3 carry no deadline, but step 3 may have to wait for a failure window that has not recurred since 2026-08-12.
+Per-intent means for the 2026-08-19 run, against 2026-08-12:
 
-1. Reconstruct the failure timeline from Prometheus, as above. Record the result in the findings log.
-2. Capture a healthy baseline from inside the backend container: `/etc/resolv.conf`, the addresses `generativelanguage.googleapis.com` resolves to, and the subject and issuer chain the TLS peer presents. Without a known-good picture, a capture taken during a failure cannot be read.
-3. Run a watchdog that attempts resolution and a TLS handshake on an interval and appends timestamped results to a file, so the next window is captured with the evidence H2 needs instead of being missed.
-4. Only once this is understood: re-run the load, saving stdout to a file.
+| intent | 2026-08-12 | 2026-08-19 | note |
+|---|---|---|---|
+| weather | 8.60 s | 7.04 s | the only intent that makes an external call |
+| general | 6.85 s | 6.78 s | local RAG |
+| transportation | 6.56 s | 6.33 s | in-memory mock |
+| hotel | 6.54 s | 5.83 s | in-memory mock |
+
+`weather` carries a premium over the other three in both runs — its two Open-Meteo round trips — but the premium falls from about 1.95 s to about 0.73 s. That is consistent with those round trips being slow on 2026-08-12 and fast on 2026-08-19, which supports rather than undermines the reading that the earlier environment was degraded.
+
+The 2026-08-19 ordering also matches the architecture exactly: in-memory mocks fastest, local RAG next, external HTTP slowest. `backend/mcp_servers/flight_server.py` and `hotel_server.py` import no HTTP client and make no network call at all — **`weather_server.py` is the application's only external dependency besides Gemini.**
+
+## The residual
+
+Five consecutive failures, from roughly 08:45:55Z to the lid closing at 08:49:16Z — **three minutes and twenty-one seconds**, not the twenty minutes the raw timestamps suggest, since the rest of that span was sleep. The machine was awake, and Prometheus was scraping normally throughout.
+
+This is unexplained. Power management on battery, in the minutes before an idle machine sleeps, is the most plausible candidate, and it is only a candidate.
+
+**It cannot be investigated further.** The load generator's stdout was never saved, and the backend container's logs from 2026-08-12 were destroyed when the container was recreated on 2026-08-18. Prometheus holds only timings and durations, and those have all been extracted into this document. The two error strings recorded in earlier notes — a name-resolution failure and a self-signed-certificate rejection — are second-hand; the originals are gone.
+
+It did not reproduce under controlled conditions. Treat it as a known unknown rather than an open task.
+
+## Consequences
+
+- **9-d is unblocked.** Use the 2026-08-19 run for the end-to-end record, not the 2026-08-12 one.
+- **Run load tests on AC power, lid open, under `caffeinate`.** `docs/step8.md`'s "Generating load" section says so. A run interrupted by sleep produces data indistinguishable from a network failure — that is the whole of this document.
+- `observability/prometheus.yml` defines a single job and no self-scrape. That is why the TSDB could not, on its own, distinguish "Prometheus was stalled" from "Prometheus could not reach the backend"; `pmset` settled it from outside. A self-scrape job would make the next such question answerable from the data. Not done here.
+- The 2026-08-12 samples age out of Prometheus around **2026-08-27** under the default 15-day retention. Every figure needed has been extracted above, so no re-query should be necessary, but `docker-compose down -v` before that date destroys them early for no reason.
 
 ## Findings log
 
-Append dated entries below as evidence arrives. Do not overwrite earlier entries — a hypothesis that was ruled out is worth as much as one that was confirmed.
-
-- **2026-08-18** — Record opened. Nothing measured yet beyond the above, all of which is carried over from the 2026-08-12 run and from the load generator's specification.
+- **2026-08-18** — Record opened while the cause was unknown. Timeline reconstructed from Prometheus. `pmset -g log` then showed every `up` gap covered by a sleep/wake pair, and the 1025.74-second request overlapping a 999-second Clamshell Sleep.
+- **2026-08-19** — Controlled re-run: 60/60 successes, no sleep during the run. Open-Meteo reachable from inside the container on three consecutive attempts. Record closed, with the three-minute residual above left unexplained.
+- **2026-08-19, record-keeping note** — the TSDB holds about 108 requests for 2026-08-19, not 60. An earlier attempt was killed by tooling after roughly 48 requests, all of which succeeded and all of which are recorded. The clean 60-request run is the one in the window 09:11:37Z–09:24:03Z; use that window when querying this date.

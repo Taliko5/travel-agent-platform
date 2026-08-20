@@ -42,12 +42,14 @@ To reset all observability data (as opposed to a plain restart, which preserves 
 The Grafana panels use `rate()`, which needs several scrape intervals of data before it reads as anything but broken. Hand-issued `curl` calls do not produce enough points.
 
 ```bash
-python scripts/generate_load.py 2>&1 | tee /tmp/load-$(date +%Y%m%d-%H%M).log
+backend/venv/bin/python scripts/generate_load.py 2>&1 | tee /tmp/load-$(date +%Y%m%d-%H%M).log
 ```
 
 Defaults are 60 requests, concurrency 1, and 6 seconds between requests — about 10 requests/minute, which stays inside the Gemini free tier's rate limit. A full run takes roughly 13 minutes — `--delay` is the gap *between* requests and each request itself takes about 7 seconds, so 60 × (7 + 6) seconds. It is not hanging. `--requests`, `--concurrency`, `--delay` and `--base-url` override them; do not raise the rate unless the key in `backend/.env` is a paid one.
 
 Keep the log. The 2026-08-12 run's stdout was not saved — `docs/step8-host-network.md` records what that cost.
+
+The explicit interpreter path is required: the script needs `httpx`, which is installed in the backend's virtualenv rather than in the system interpreter. On macOS, wrap the command in `caffeinate -dimsu` and leave the lid open — a run interrupted by the machine sleeping produces data that is indistinguishable from a network failure, which is what happened on 2026-08-12. `docs/step8-host-network.md` has that case.
 
 ## Scaffolded vs. Yours
 

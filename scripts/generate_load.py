@@ -112,9 +112,11 @@ async def _run_worker(
                     f"status={response.status_code} body={response.text}",
                     file=sys.stderr,
                 )
+            # flush: piped into tee, so an interrupted run still leaves its log
             print(
                 f"[worker {worker_id}] target={target_branch} "
-                f"intent={intent or '-'} status={status} latency={elapsed:.2f}s"
+                f"intent={intent or '-'} status={status} latency={elapsed:.2f}s",
+                flush=True,
             )
         except httpx.HTTPError as exc:
             elapsed = time.perf_counter() - started
