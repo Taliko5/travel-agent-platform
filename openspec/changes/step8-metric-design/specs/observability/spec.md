@@ -35,6 +35,19 @@ The system SHALL include a test asserting that seeded counters appear on `/metri
 
 ## ADDED Requirements
 
+### Requirement: Metric Recording Is Additive
+The system SHALL record metrics as an addition to existing behaviour only. No recording site SHALL alter the `AgentState` a run produces, the response a `POST /chat` request returns, or the propagation of an exception raised while handling it.
+
+#### Scenario: A request that succeeds
+- **WHEN** a `POST /chat` request is handled with metric recording in place
+- **THEN** the response status and body SHALL be identical to what the same request would produce with no recording site present
+- **AND** the `AgentState` the run produces SHALL be identical as well
+
+#### Scenario: A request raises
+- **WHEN** a `POST /chat` request raises while being handled, and its outcome is recorded on `chat_request_duration_seconds`
+- **THEN** the original exception SHALL propagate unchanged
+- **AND** SHALL NOT be suppressed or replaced by anything the recording raises
+
 ### Requirement: Counter Seeding
 The system SHALL seed every counter instrument at zero from a hook invoked after the `MeterProvider` is installed, and SHALL NOT seed histogram instruments.
 
@@ -42,7 +55,7 @@ The system SHALL seed every counter instrument at zero from a hook invoked after
 - **WHEN** the backend has started and no `POST /chat` request has been handled
 - **THEN** `/metrics` SHALL expose each counter at 0
 - **AND** `intent_classification_total` SHALL be exposed for every valid intent crossed with every value of its `fallback` label
-- **AND** no histogram instrument SHALL be exposed
+- **AND** none of the histogram instruments this system declares SHALL be exposed
 
 #### Scenario: Seeding is attempted before the provider is installed
 - **WHEN** a measurement is recorded on an instrument before the `MeterProvider` is installed
