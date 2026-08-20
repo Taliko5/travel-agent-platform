@@ -368,7 +368,7 @@ failure or a schema problem shows up here, not in the UI.
 ## Task 3: Record the 9-d end-to-end verification
 
 Add a **"Verified End-to-End"** section to `docs/step8.md`, and check off the corresponding
-items in `openspec/changes/step8-observability-scaffold/tasks.md` Section 9.
+items in `openspec/changes/step8-metric-design/tasks.md`.
 
 Run through the following against a live `docker-compose up --build` stack and record the
 **actual observed result** for each — not the expected one. If something does not work, write
@@ -378,20 +378,22 @@ report instead).
 
 1. `curl -s localhost:8000/metrics/` returns 200 and contains
    `chat_request_duration_seconds_bucket` and `intent_classification_total`.
-   Confirm `llm_call_duration_seconds` and `rag_retrieval_total` are **absent** — expected,
-   because neither has any recording call site yet (the unfinished Section 9-a work).
+   Confirm `llm_call_duration_seconds` is **absent** — it has no recording call site, and
+   histograms are deliberately never seeded.
+   Confirm `rag_retrieval_total` is **present at 0** — it has no recording call site either,
+   but counters are seeded, and a label-less zero is the deliberate choice recorded in
+   `openspec/changes/step8-metric-design/tasks.md`.
 
-   **Run this check *after* item 4's load generation, not before.** Measured 2026-08-11: on a
-   freshly restarted backend with no traffic, `/metrics` returns only the ten default
-   `python_*` / `process_*` series — no application metrics and no `target_info`. The first
-   `/chat` request makes `chat_request_duration_seconds` and `intent_classification_total`
-   appear. Checking this item on a cold stack will fail for a reason that has nothing to do
-   with what the item is testing.
+   **Run this check *after* item 4's load generation, not before.**
+   `chat_request_duration_seconds` is a histogram and is never seeded, so it does not appear
+   until a real `/chat` request records into it. Checking this item on a cold stack fails for
+   a reason that has nothing to do with what the item is testing.
 
-   Do **not** attribute `rag_retrieval_total`'s absence to "no seeding": `metrics.py` does seed
-   it with `.add(0)`, and the seed is discarded. Root cause and the agreed fix are recorded in
-   `tasks.md` Section 9; it is application code and out of scope here. Record what you observe
-   and move on.
+   (Corrected 2026-08-20. This item previously required `rag_retrieval_total` to be absent and
+   explained that its `.add(0)` seed was discarded, citing a 2026-08-11 measurement in which a
+   freshly restarted backend exposed only the ten default `python_*` / `process_*` series. That
+   was accurate when written. The counter-seeding fix has since landed, so seeded counters now
+   appear on a cold stack and the old expectation would fail.)
 2. `curl -s -o /dev/null -w '%{http_code}' localhost:8000/metrics` returns `307`
    (no trailing slash), and `localhost:8000/metrics/` returns `200`.
    Note in the docs that `observability/prometheus.yml` uses `metrics_path: /metrics` and
