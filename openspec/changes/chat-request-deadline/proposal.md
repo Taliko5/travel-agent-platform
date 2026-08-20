@@ -1,6 +1,8 @@
 ## Why
 
-`POST /chat` has no server-side deadline. During the load run of 2026-08-12, one request ran for **1025.74 seconds** before giving up, because `google_genai`'s internal `tenacity` retry loop kept retrying a failing outbound call and nothing above it imposed a bound. The environmental trigger for that specific run is a separate, still-open problem tracked in `docs/step8-host-network.md` — but the unbounded wait is an application defect independent of what triggers it: any sufficiently slow or hanging upstream call turns into an unbounded `/chat` request today.
+`POST /chat` awaits its graph invocation with nothing above it imposing a ceiling. During the 2026-08-12 load run, five consecutive requests each spent 34-35 seconds inside `google_genai`'s internal `tenacity` retry loop before it gave up. That bound came from the library's retry policy, not from `/chat`, and it applies to calls that *fail*. A call that hangs has no such bound, and nothing in the handler distinguishes the two cases.
+
+**Correction to the original motivation.** This change was first written around a sixth request from that run, recorded at 1025.74 seconds and read as the same retry loop running unchecked for seventeen minutes. That reading was wrong: 999 of those seconds were a macOS Clamshell Sleep, and roughly 27 seconds of work took place. `docs/step8-host-network.md` records how that was established. The proposal no longer rests on that incident — the missing ceiling is a structural defect regardless of whether it has yet produced a dramatic one.
 
 ## What Changes
 
