@@ -26,9 +26,10 @@ key can opt into more load explicitly.
 A single run at the defaults takes roughly 13 minutes, not the six that the
 delay alone suggests: --delay is the gap *between* requests, and each request
 itself takes about 7s against the Gemini free tier (the measured per-intent
-latencies are in docs/step8-task9c9d.md). 60 x (~7s + 6s) is about 13
-minutes. That is expected -- if the script appears to hang, it probably
-hasn't. Scale the estimate up if the backend is slower than that.
+latencies live in the panel descriptions inside
+observability/grafana/dashboards/travel-agent-overview.json). 60 x (~7s + 6s)
+is about 13 minutes. That is expected -- if the script appears to hang, it
+probably hasn't. Scale the estimate up if the backend is slower than that.
 """
 
 import argparse

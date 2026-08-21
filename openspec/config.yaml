@@ -1,13 +1,33 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+# Project context. Shown to AI when creating artifacts.
+context: |
+  Travel planning agent. FastAPI + LangGraph backend, Next.js 14 frontend,
+  OpenTelemetry / Prometheus / Grafana for observability.
+
+  Write everything that lands in a file in English — specs, proposals, designs,
+  task lists, code, comments, commit messages. Conversation about the work may
+  be in any language; the repository is not.
+
+  `openspec/` owns spec-driven work: the requirements, the changes that alter
+  them, and the task lists tracking those changes. `docs/` carries concepts and
+  narrative only — what a step is for, and the reasoning that cannot be
+  recovered by reading the code. A document that states a requirement belongs in
+  `openspec/`, not in `docs/`.
+
+  The split turns on constraining versus reporting. A record of what was
+  observed — a verification write-up, an investigation that reached a
+  conclusion — reports on the system rather than binding it, and stays in
+  `docs/`. The procedure that produced those observations does bind, and lives
+  with the change whose requirements it tests.
+
+  A change directory holds exactly `.openspec.yaml`, `proposal.md`, `design.md`,
+  `tasks.md`, and `specs/<capability>/spec.md`. Do not add a fifth artifact —
+  put the content in one of those four.
+
+  `CLAUDE.md`'s `## Working Agreement` governs how changes get made: who commits,
+  what counts as evidence, how far an edit may reach, where a measurement lives,
+  and which two operations are destructive. Read it before editing anything here.
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.
