@@ -96,12 +96,12 @@ The system SHALL provision a Grafana dashboard from a version-controlled JSON fi
 - **THEN** the panel SHALL render zero rather than "No data"
 
 ### Requirement: Trace and Log Correlation for a Single Request
-The system SHALL make the log lines emitted while handling one request identifiable as belonging to that request.
+The system SHALL make the log lines emitted through the application's configured logging handler during a request's active span identifiable as belonging to that request. This does not extend to a line emitted by a logger that bypasses that handler, nor to one emitted after the request's span has ended, both of which are the scaffold's `Structured Logging with Trace Correlation` requirement to satisfy or not.
 
 #### Scenario: A single request's log lines
 - **WHEN** one `POST /chat` request is handled
-- **THEN** each log line it emits SHALL carry a non-null `trace_id`
-- **AND** all of that request's log lines SHALL share the same `trace_id`
+- **THEN** each log line emitted through the application's configured logging handler while the request's span is active SHALL carry a non-null `trace_id`, whichever logger produced it
+- **AND** all of those log lines SHALL share the same `trace_id`
 - **AND** the completion line SHALL additionally carry the request's resolved intent, its status, and its duration
 
 ### Requirement: Self-Observation Excluded from Tracing

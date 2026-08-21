@@ -1,0 +1,29 @@
+## Why
+
+`step8-observability-scaffold`'s `Structured Logging with Trace Correlation` requires the system to emit backend logs in structured (JSON) format. `uvicorn.access` and `uvicorn.error` set `propagate=False` and install handlers of their own, so their lines never reach `backend/observability/logging.py`'s `configure_logging()` and its JSON formatter — they are emitted as plain text. Pass 1b of `step8-metric-design`'s 9-d verification enumerated every log line one `/chat` request emits and found this directly: 16 of 17 lines carried the request's `trace_id` as JSON; the 17th — uvicorn's own access line, logged after the ASGI app returned — was plain text with no structure at all. The evidence is in `docs/step8-9d-evidence.md` (pass 1b, item 6). `step8-metric-design`'s `design.md` (D7, D8) records the decision that this is a real, unfixed gap in the scaffold's requirement, distinct from and not excused by that requirement's own "null `trace_id` outside a span" allowance — and decides, in D8, that the fix is to convert these two loggers' output to JSON rather than switch them off. This change exists to carry out that decision.
+
+## What Changes
+
+- Reconfigure `uvicorn.access` and `uvicorn.error` to emit through the same JSON formatter (`JsonFormatter` + `TraceCorrelationFilter`) `configure_logging()` already builds for the application's own logger, instead of leaving them on uvicorn's default plain-text handlers.
+- Do this from a hook proven to run after uvicorn's own logging setup — a FastAPI startup event or lifespan — rather than from `configure_logging()` at import time. `configure_logging()` runs when `backend/api/main.py` is imported; whether that happens before or after uvicorn configures `uvicorn.access`/`uvicorn.error` is the open ordering question `step8-metric-design`'s D8 flagged as unverified. This change resolves it by construction: a startup hook is guaranteed by ASGI to fire only after uvicorn's `Server` has already finished its own setup, so nothing run there can be clobbered by uvicorn afterward.
+- Leave `TraceCorrelationFilter`'s existing behavior untouched: a log line with no active span gets a null `trace_id`/`span_id`, exactly as the scaffold's own spec already sanctions. Uvicorn's access line normally fires after the request's span has already closed (pass 1b's finding), so a null `trace_id` there is the correct, expected outcome — not something this change tries to avoid, and not something it proposes middleware to work around.
+- Verify against the running `docker-compose` stack — not just `pytest` — that the reconfigured loggers actually produce JSON, and that the fix survives a real `docker-compose` startup, not only a local `--reload` cycle. `TestClient`-based tests never invoke uvicorn's own logging machinery at all, so this is a live check by necessity, not a gap in test-writing effort (see Impact and `design.md`'s Open Questions).
+
+## Capabilities
+
+### Modified Capabilities
+- `observability`: extends `Structured Logging with Trace Correlation` (originating in `step8-observability-scaffold`, not yet archived) so its JSON requirement explicitly covers `uvicorn.access`/`uvicorn.error`, and adds a scenario naming the access-line case. Does not touch `step8-metric-design`'s own `Trace and Log Correlation for a Single Request` requirement — that one was already scoped correctly by its own D7 and is unaffected by this change.
+
+## Impact
+
+- **Affected code**: `backend/observability/logging.py` (expose the JSON handler construction for reuse rather than only wiring it to the root logger), `backend/api/main.py` (add the startup hook that reconfigures `uvicorn.access`/`uvicorn.error`).
+- **Affected tests**: none can meaningfully exercise this through `pytest` alone — `fastapi.testclient.TestClient` talks to the ASGI app directly and never starts a real uvicorn `Server`, so `uvicorn.access`/`uvicorn.error` never fire under it. Verification is a live `docker-compose logs backend` check, in the same spirit as `step8-metric-design`'s 9-d procedure. This is recorded as a real limitation in `design.md`, not deferred silently.
+- **CI**: `.github/workflows/ci.yml` gates the backend job on `backend/**` changes; this change touches `backend/`, so CI will run the existing suite against it, but the suite cannot assert the behavior this change adds (see above).
+- **Docs**: `docs/step8.md`'s eventual "Verified End-to-End" section (pass 2 of the 9-d procedure, not yet written) and item 8's finding both describe the current interleaved plain-text/JSON log shapes; once this lands, that description becomes historical rather than current. Updating it is not in this change's scope — it belongs to whichever change owns that document at the time.
+
+## Non-Goals
+
+- Switching off `uvicorn.access`/`uvicorn.error` — considered and rejected in `step8-metric-design`'s D8. That path is cheaper and certain, but it would destroy the only log-level record of a request that never reaches the application's own handler, of `/health`/`/metrics` traffic (deliberately excluded from tracing, so nothing else records it either), and of the status code actually sent to the client, which can diverge from the status the handler recorded when FastAPI's response-model validation fails after the handler returns.
+- Engineering a non-null `trace_id` onto a log line emitted outside any active span, by middleware or any other means. `TraceCorrelationFilter`'s null-outside-a-span behavior is the scaffold's documented design, not a defect; this change's job is to make uvicorn's lines JSON, not to change what they carry.
+- Re-opening `step8-metric-design`'s `Trace and Log Correlation for a Single Request` scenario or its D7 — that decision stands as made.
+- CloudWatch log shipping itself (Step 9's own scope) — this change only makes the line-oriented-JSON premise that work already assumes actually true for these two loggers.
