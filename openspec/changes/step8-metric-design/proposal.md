@@ -28,7 +28,7 @@ Section 9 of `step8-observability-scaffold` was headed "reference only — not i
 ## Impact
 
 - **Affected code**: `backend/api/main.py` (recording call sites, `seed_counters()` invocation), `backend/observability/metrics.py` (label sets, bucket boundaries, seeding), `backend/agent/nodes.py` (`VALID_INTENTS`), `backend/tests/`.
-- **New files**: `observability/grafana/dashboards/travel-agent-overview.json`, `scripts/generate_load.py`, `docs/step8-task9c9d.md`, `docs/step8-host-network.md`.
+- **New files**: `observability/grafana/dashboards/travel-agent-overview.json`, `scripts/generate_load.py`, `docs/step8-host-network.md`. A fourth, `docs/step8-task9c9d.md`, was written and then removed on 2026-08-21: its verification procedure moved into this change's `tasks.md`, and the rest of it had come to duplicate the panel descriptions and the dashboards `README.md`.
 - **Docs**: `docs/step8.md` gains a "Generating load" section and, from 9-d, a "Verified End-to-End" section.
 - **CI**: `.github/workflows/ci.yml` gates the backend jobs on `backend/**`, so nothing under `scripts/` or `observability/` is linted or tested there. The local `ruff check scripts/` is the only check those files get.
 - **Cross-change dependency**: `chat-request-deadline`'s spec delta already requires that no `status` value other than `ok` or `error` is produced. That invariant is specified here.

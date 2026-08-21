@@ -2,7 +2,7 @@
 
 `step8-observability-scaffold` left four metric instruments declared with no recording call sites, no label sets and provisional bucket boundaries, on the stated grounds that low-cardinality label design was itself the learning objective. This change is that work. Two of the four instruments are now recorded; two are still declared and unrecorded.
 
-The authoritative detail lives in two places and is deliberately not repeated here. `docs/step8-task9c9d.md` owns the panel expressions, the panel descriptions and the measurement figures quoted in them. This change's `tasks.md` owns the per-item history — the seeding defect's root cause, the bucket measurements, and the decisions taken along the way. A second copy of those numbers is what produced the 2026-08-11 / 2026-08-12 discrepancy already recorded there.
+The authoritative detail lives in two places and is deliberately not repeated here. Each panel's expression, the reasoning behind it and the measurement figures it quotes live in that panel's own `description` field in `observability/grafana/dashboards/travel-agent-overview.json`, which is where a reader meets them; `observability/grafana/dashboards/README.md` covers what makes a dashboard file provisionable. This change's `tasks.md` owns the per-item history — the seeding defect's root cause, the bucket measurements, and the decisions taken along the way. A second copy of those numbers is what produced the 2026-08-11 / 2026-08-12 discrepancy already recorded there.
 
 ## Goals / Non-Goals
 
@@ -37,7 +37,9 @@ It has no recording call sites, no label set and no panel. A label-less zero is 
 ### D4 — The dashboard is file-provisioned and two of its expressions are frozen
 `observability/grafana/dashboards/travel-agent-overview.json` is a raw dashboard model loaded by Grafana's file provider, not an API wrapper object, so it can be dropped into the provisioning path and version-controlled. Confirmed provisioned on 2026-08-18 via Grafana's API reporting `meta.provisioned: true`.
 
-The error-rate and classifier-fallback panels wrap their numerators — and only their numerators — in `or vector(0)`. That placement was verified against live data and is not open to revision; `docs/step8-task9c9d.md` records why.
+The error-rate and classifier-fallback panels wrap their numerators — and only their numerators — in `or vector(0)`. That placement was verified against live data and is not open to revision; each of those two panels' `description` records why.
+
+The heatmap panel needs two settings that nothing in its rendered output will tell you are missing: `"format": "heatmap"` on the Prometheus target, and `"calculate": false` in the panel options. The first is what makes the datasource sort series by `le` and convert Prometheus' cumulative buckets into the per-bucket counts a heatmap needs; the second stops Grafana re-bucketing values that are already bucketed. Omit either and the panel still draws — as a plausible picture in which every row above the data is darker than the one below it. It is wrong, and it does not look wrong.
 
 ### D5 — Bucket boundaries are provisional and get one measured re-tune
 The scaffold's boundaries were a guess. They are re-tuned once, from an actual latency distribution, rather than repeatedly. `llm_call_duration_seconds` must not copy `chat_request_duration_seconds`'s boundaries — it measures a component of a request, not a request — and gets its own coarse set, measured, then tuned once.
@@ -49,7 +51,7 @@ The scaffold's boundaries were a guess. They are re-tuned once, from an actual l
 
 - **[Risk]** Label cardinality grows silently as intents or statuses are added → **Mitigation**: `VALID_INTENTS` is a single module constant shared by the classifier and the seeding loop, so adding an intent cannot quietly desynchronise the two; `status` is fixed at two values by D1.
 - **[Risk]** A histogram series that does not exist until traffic occurs makes a healthy dashboard read "No data" → **Mitigation**: the affected panel expressions guard their numerators, per D4.
-- **[Risk]** The dashboard's expressions and the instrumentation's label sets are coupled but declared in different files, with nothing enforcing the link → **Mitigation**: recorded here and in `docs/step8-task9c9d.md`; not automated.
+- **[Risk]** The dashboard's expressions and the instrumentation's label sets are coupled but declared in different files, with nothing enforcing the link → **Mitigation**: recorded here and in the panel descriptions themselves; not automated.
 - **[Risk]** Nothing under `scripts/` or `observability/` is exercised by CI, so a broken dashboard JSON or load script is only caught by hand → **Mitigation**: none in this change. Recorded as an open item.
 
 ## Open Questions
@@ -57,3 +59,5 @@ The scaffold's boundaries were a guess. They are re-tuned once, from an actual l
 - **Span names and attributes.** Which request and response data belongs on the `classify_intent` chain span, the `generate_response` chain span, and the LLM-call span nested within it. Not started.
 - **`llm_call_duration_seconds` and `rag_retrieval_total` call sites.** Both instruments are declared and unrecorded. Their label sets follow from where they are recorded, which has not been decided.
 - **CI coverage for `scripts/` and `observability/`.** Whether to extend `dorny/paths-filter` to those paths, and what would run if it did.
+- **Whether `Prometheus Scrapes the Backend Successfully` is an addition or a supersession.** The scaffold's `Prometheus-Scrapable Metrics Endpoint` requires `GET /metrics` to return `200`. This change's requirement covers the same target but tolerates a redirect. If the backend answers `/metrics` with a redirect rather than with the metrics, the scaffold's requirement is false as written, and this one supersedes it rather than adding to it. Item 2 of the 9-d verification produces that evidence; the decision waits on it.
+- **Whether the log requirements are scoped too widely.** `Trace and Log Correlation for a Single Request` requires every log line a request emits to carry a `trace_id`, and the scaffold's `Structured Logging with Trace Correlation` requires backend logs to be JSON. Uvicorn's access logs are neither, and they are emitted while a request is being handled. Either both requirements mean the application's own log lines and should say so, or the system does not satisfy them. Item 8 of the 9-d verification records the observation; the wording is a separate decision.

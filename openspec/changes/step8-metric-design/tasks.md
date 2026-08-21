@@ -49,8 +49,8 @@ Moved verbatim on 2026-08-20. That section's heading described it as "reference 
   - Panel 6 of `travel-agent-overview.json` (latency distribution heatmap) exists to make this re-checkable after the change lands.
 - Decide and apply real span names/attributes for the events `OTelCallbackHandler` (Section 4) receives (e.g. what request/response data belongs on the `classify_intent` chain span vs. the `generate_response` chain span vs. the nested LLM-call span within it).
 - **9-c — Build Grafana dashboards** in `observability/grafana/dashboards/` visualizing `/chat` latency percentiles, intent distribution, LLM call duration, and RAG retrieval rate.
-  - Full specification: **`docs/step8-task9c9d.md`**. That document is authoritative for the panel expressions, the panel descriptions, and the measurement figures quoted in them. Do not restate any of it here — the checklist below tracks progress only, and a second copy of the numbers is how the 2026-08-11 / 2026-08-12 discrepancy in this section arose.
-  - [x] `scripts/generate_load.py` (Task 1) — recreated 2026-08-18 from the Task 1 specification in `docs/step8-task9c9d.md`. `rate()` needs several scrape intervals of data before the panels read as anything but broken, so this is a prerequisite for verifying any expression.
+  - Each panel's expression and the reasoning behind it live in that panel's own `description` field in `observability/grafana/dashboards/travel-agent-overview.json`; the rules for writing a provisionable dashboard file live in `observability/grafana/dashboards/README.md`. The measurement figures quoted in those descriptions exist nowhere else on purpose — a second copy of the numbers is how the 2026-08-11 / 2026-08-12 discrepancy in this section arose. The checklist below tracks progress only.
+  - [x] `scripts/generate_load.py` (Task 1) — recreated 2026-08-18 from its written specification, then held in `docs/step8-task9c9d.md` and since folded into this change. `rate()` needs several scrape intervals of data before the panels read as anything but broken, so this is a prerequisite for verifying any expression.
     - **This item previously read "committed", which was not true.** Checked 2026-08-18: neither `scripts/generate_load.py` nor the `scripts/` directory existed in the working tree, on any branch, or in either worktree under `.claude/worktrees/`, and `.gitignore` does not exclude them; the "Generating load" subsection Task 1 also requires in `docs/step8.md` was missing too. The 2026-08-12 load run did happen, so a generator existed at that time and was never landed in the repo. A `[x]` in this file is not evidence that the artefact it names is on disk — check.
   - [x] Verify all eight PromQL expressions in the Prometheus expression browser (panels 1–6; panel 1 contributes three) — all eight returned non-empty.
   - [x] `observability/grafana/dashboards/travel-agent-overview.json` (Task 2) — raw dashboard model, `uid: travel-agent-overview`, `id: null`, datasource referenced through a `${datasource}` template variable:
@@ -73,18 +73,96 @@ Moved verbatim on 2026-08-20. That section's heading described it as "reference 
 
 ## 2. 9-d — End-to-end verification
 
-Full procedure: **`docs/step8-task9c9d.md`, Task 3** — eight numbered items. That document is authoritative; the checklist below tracks progress only. Do not restate the procedure here.
+The eight items at the end of this section are the procedure. They were moved here on 2026-08-21 from Task 3 of `docs/step8-task9c9d.md`, which is deleted: `docs/` carries concepts, and a procedure that decides whether requirements hold belongs with the change that owns those requirements. Two things changed in the move, both marked where they apply — the original ran against a freshly built stack, and it permitted configuration fixes when something did not work. Neither holds now.
 
 Preconditions, established 2026-08-19 and 2026-08-20, not to be re-litigated: the host-network question is closed (`docs/step8-host-network.md`), and the run to verify against is the controlled one of 2026-08-19 — 60 requests, 60 × HTTP 200, `caffeinate` confirmed to have held. The TSDB holds roughly 108 requests for that date because an earlier attempt was killed by tooling after about 48; the clean run is the window 09:11:37Z–09:24:03Z.
 
-- [ ] Item 1 — `/metrics/` contents: which of the four declared instruments appear
-- [ ] Item 2 — `/metrics` returns 307 and `/metrics/` returns 200
-- [ ] Item 3 — Prometheus target `UP`; record the scrape interval actually in effect
-- [ ] Item 4 — all eight panel queries return data (panels 1–6; panel 1 contributes three)
-- [ ] Item 5 — Grafana renders the provisioned dashboard with populated panels
-- [ ] Item 6 — trace/log correlation: the paired log lines of one request share a `trace_id`
-- [ ] Item 7 — no FastAPI spans for `/health` or `/metrics` after roughly two minutes idle
-- [ ] Item 8 — record, do not fix, the mixed JSON and plain-text log streams
-- [ ] Write the observed results into a "Verified End-to-End" section of `docs/step8.md`
+### What this verification is
+
+Not "run the eight items and write down what was seen". Each item exists to decide whether the system satisfies a named scenario in `specs/observability/spec.md`. An item that does not is recorded as a failure and reported — not fixed, not worked around. A requirement that fails here is a requirement doing its job.
+
+### Two passes
+
+**Pass 1 — evidence.** Observations only. Do not write `docs/step8.md`, do not tick the checklist below, and do not touch application code, container configuration or the dashboard JSON. Raw command output goes to a scratch file outside version control, deleted once pass 2 lands, so that every figure ends up in exactly one place.
+
+**Pass 2 — prose.** The "Verified End-to-End" wording is composed from the recorded evidence, not from the running system. The split is deliberate: an earlier verification wrote its own interpretation of a weather-tool result into a document, and the misdiagnosis outlived the session that produced it.
+
+### Entry gates
+
+All three must pass before any item runs. If one does not, report and stop.
+
+- **G1 — the backend has not restarted since the run.** `docker inspect -f '{{.State.StartedAt}}' "$(docker-compose ps -q backend)"`. A start time later than the end of the run window above means `/metrics` no longer holds the run's observations; since re-running the load generator is forbidden, item 1 cannot be satisfied. That is a blocked verification, not a failed requirement.
+- **G2 — the TSDB still holds the run.** `up{job="travel-agent-backend"}` returns a point at the evaluation instant below.
+- **G3 — the working tree is clean.** `git status --short` is empty, or its contents are reported before anything else runs.
+
+### Evaluation instant
+
+Every dashboard panel is a `rate(...[5m])`. Evaluated at "now" — days after the run, with no traffic since — all eight expressions return empty. That is a wrong evaluation time, not a failed requirement, and recording it as the latter would invalidate the exercise.
+
+Evaluate at an instant whose five-minute window falls inside the run window above: `2026-08-19T09:20:00Z`, cross-checked at `09:24:00Z`. Use instant queries with an explicit `time=` parameter rather than the expression browser's default. The same window bounds the `up` check in item 3 — that day holds roughly 108 requests across two runs, so an unbounded query does not describe the run being verified. For the Grafana UI, set an absolute range; the dashboard's `timezone` is `browser`, so it is entered in local time rather than UTC.
+
+### Which expressions are under test
+
+Read the eight expressions from `targets[].expr` in `observability/grafana/dashboards/travel-agent-overview.json`, never from a prose copy of them. What must hold is that the dashboard's own expressions return data.
+
+### Scenario coverage
+
+| Item | Scenario in `specs/observability/spec.md` |
+|---|---|
+| 1 | `An instrument with no recording call site` |
+| 1 | `A /chat request completes successfully` |
+| 1 | `No third status value is ever produced` |
+| 2 | `The metrics path is requested without a trailing slash` |
+| 3 | `Prometheus scrapes the configured path` |
+| 4 | `Panel queries are evaluated against recorded data` |
+| 4 | `A ratio panel is evaluated before its numerator has ever occurred` |
+| 5 | `Grafana starts with the repository's provisioning configuration` |
+| 6 | `A single request's log lines` |
+| 7 | `The stack idles with no user traffic` |
+
+Item 8 maps to no scenario; it raises an open question instead, recorded in `design.md`.
+
+Item 5 verifies the Grafana-to-Prometheus path by querying the dashboard's expressions through Grafana's own API. Whether the panels *look* right on screen is a human check and is not claimed by this pass.
+
+### Scenarios this verification cannot reach
+
+Record these as out of scope rather than leaving their status ambiguous:
+
+- `Backend has started and no request has been made` — needs a restart, which G1 forbids. `rag_retrieval_total` present at zero is partial evidence only: with no recording call sites, seeding is the only path by which that series can exist.
+- `A /chat request fails` — the run under verification returned HTTP 200 throughout. No failure occurred to observe.
+- Both scenarios of `Metric Recording Is Additive` — they compare behaviour against its own absence, which is a test-suite question rather than an end-to-end one.
+- `Seeding is attempted before the provider is installed`, `A new intent is added to the classifier`, and all three scenarios of `Reproducible Load Generation`.
+
+### Two guards, probably only one exercised
+
+Panels 4 and 5 both wrap their numerator in `or vector(0)`, but counter seeding has changed what that guard meets. `intent_classification_total{fallback="true"}` is now seeded at zero, so panel 5's numerator is no longer an empty vector, while `status="error"` has no series at all because histograms are never seeded. The evidence for `A ratio panel is evaluated before its numerator has ever occurred` therefore comes from panel 4. Panel 5's correct finding may be "guard present, not exercised" — check rather than assume, and record which of the two actually fired.
+
+Item 7 needs the active span exporter established first. With `OTEL_EXPORTER_OTLP_ENDPOINT` set, spans never reach the container logs, and their absence there would prove nothing.
+
+### Stop rule
+
+A failure is never fixed. Whether to continue depends on whether it invalidates what follows:
+
+- **Stop** on a failure in G1–G3, item 1 or item 3 — every later figure depends on them.
+- **Record and continue** on items 6, 7 and 8, which are independent of one another.
+- **When unsure, stop.**
+
+### The eight items
+
+Record the actual observed result for each, not the expected one.
+
+Two adaptations were made when these moved out of `docs/step8-task9c9d.md`. The originals ran against a stack brought up fresh; they now run against the stack that served the 2026-08-19 run, which gate G1 exists to confirm. The originals also allowed a configuration fix when something did not work; the stop rule above replaces that, and nothing is fixed.
+
+- [ ] **Item 1 — `/metrics/` contents.** `curl -s localhost:8000/metrics/` returns 200 and contains `chat_request_duration_seconds_bucket` and `intent_classification_total`. `llm_call_duration_seconds` is **absent** — it has no recording call site, and histograms are deliberately never seeded. `rag_retrieval_total` is **present at 0** — it has no recording call site either, but counters are seeded, and a label-less zero is the deliberate choice recorded in Section 1.
+  - The histogram appears only because the process has served `/chat` traffic since it started. On a restarted backend it is absent, and the item then fails for a reason that has nothing to do with what it tests. G1 is what rules that out; in the original procedure the same hazard was handled by generating load first.
+  - Corrected 2026-08-20. This item previously required `rag_retrieval_total` to be **absent**, and explained that its `.add(0)` seed was discarded — accurate when written, and measured on 2026-08-11 against a freshly restarted backend exposing only the ten default `python_*` / `process_*` series. The counter-seeding fix has since landed, so seeded counters now appear and the old expectation would fail.
+- [ ] **Item 2 — the trailing slash.** `curl -s -o /dev/null -w '%{http_code}' localhost:8000/metrics` returns `307`, and `localhost:8000/metrics/` returns `200`. Record the `Location` header and what a redirect-following client ends up with. `observability/prometheus.yml` sets `metrics_path: /metrics` and relies on Prometheus following that redirect.
+- [ ] **Item 3 — the scrape target.** `http://localhost:9090/targets` shows job `travel-agent-backend` as `UP`. Record the scrape interval actually in effect, which is the configured value only if nothing overrides it.
+- [ ] **Item 4 — the panel queries.** Every query on panels 1–6 returns a non-empty result; panel 7 is a text panel and has no query. That is eight queries, because panel 1 carries three. Record any that return nothing, and do not substitute an expression of your own — report the panel, what the query returned, and stop.
+- [ ] **Item 5 — Grafana.** The provisioned dashboard is served at `http://localhost:3001` with its panels populated, and Grafana's API reports it as provisioned, naming the source file.
+- [ ] **Item 6 — trace and log correlation.** Take one `/chat` request. Its log lines carry a non-null `trace_id`; the two lines that request emits (`"chat request received"` and `"chat request completed"`) share the same one; and the completion line also carries `intent`, `status` and `duration_seconds`. `docker-compose logs backend | grep '"trace_id"'`.
+- [ ] **Item 7 — span exclusion.** No FastAPI spans are emitted for `/health` or `/metrics`, so an idle stack produces no trace traffic while the compose healthcheck and Prometheus keep polling. With the stack idle, `docker-compose logs backend --since 2m` shows no new HTTP spans for those paths.
+- [ ] **Item 8 — record, do not fix.** `docker-compose logs backend` interleaves JSON application logs with uvicorn's plain-text access logs, because `uvicorn.access` and `uvicorn.error` have `propagate=False` and handlers of their own. Record it. Step 9's CloudWatch log shipping assumes line-oriented JSON, and `design.md` carries the question of whether the log requirements are scoped too widely to permit this.
+- [ ] Write the observed results into a "Verified End-to-End" section of `docs/step8.md` (pass 2)
 
 Verification is read-only. Do not re-run the load generator, do not change container configuration, and never run `docker-compose down -v` — `prometheus_data` still holds the 2026-08-12 run until roughly 2026-08-27.

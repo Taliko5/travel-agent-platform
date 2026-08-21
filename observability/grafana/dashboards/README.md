@@ -19,13 +19,13 @@ Seven panels covering the `/chat` request path:
    `rag_retrieval_total`) have no recording call sites yet, so their
    absence from `/metrics` isn't mistaken for a bug
 
-The full specification — panel-by-panel PromQL, the reasoning behind each
-query (in particular why panels 4 and 5 wrap only their numerator in
-`or vector(0)`), and the measurement figures quoted in the panel
-descriptions — lives in `docs/step8-task9c9d.md`. That document is
-authoritative; don't restate its numbers here or in a panel description
-from memory, since that's exactly how the dashboard and the docs drift out
-of sync.
+Each panel carries its own reasoning in its `description` field — why panels
+4 and 5 wrap only their numerator in `or vector(0)`, why panels 1 and 2
+filter `status="ok"`, and the measurement figures those descriptions quote.
+That field is the only place those numbers live. Don't copy them into this
+README or into another panel, and don't restate one from memory: a second
+copy drifting from the first is how the 2026-08-11 and 2026-08-12 figures
+came to disagree.
 
 The dashboard has `"id": null` and a stable `"uid": "travel-agent-overview"`
 so it keeps the same URL across Grafana restarts. It reads its datasource
