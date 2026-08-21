@@ -10,10 +10,10 @@ The system SHALL record `/chat` request latency and classified-intent counts wit
 - **AND** `intent` SHALL be the intent the classifier resolved
 
 #### Scenario: A `/chat` request fails
-- **WHEN** a `POST /chat` request raises before producing a response
+- **WHEN** a `POST /chat` request raises before returning a response
 - **THEN** the system SHALL still record one observation on `chat_request_duration_seconds`
 - **AND** `status` SHALL be `error`
-- **AND** `intent` SHALL be `unknown` if the failure occurred before classification completed
+- **AND** `intent` SHALL be the intent the classifier resolved if the graph run had already produced one, and `unknown` otherwise
 
 #### Scenario: No third status value is ever produced
 - **WHEN** a `POST /chat` request completes by any path whatsoever, including cancellation or timeout
@@ -30,7 +30,7 @@ The system SHALL include a test asserting that seeded counters appear on `/metri
 #### Scenario: Metrics endpoint test
 - **WHEN** the test suite runs
 - **THEN** a test SHALL assert that the seeded counters are present in the `/metrics` body
-- **AND** SHALL assert that an unseeded, unrecorded histogram is absent
+- **AND** SHALL assert that `llm_call_duration_seconds` is absent — the one instrument with no recording call site anywhere, so no test ordering can populate it
 - **AND** SHALL NOT assert the absence of `chat_request_duration_seconds`, because `/metrics` is process-global state and earlier tests in the same session record into it
 
 ## ADDED Requirements
@@ -39,9 +39,9 @@ The system SHALL include a test asserting that seeded counters appear on `/metri
 The system SHALL record metrics as an addition to existing behaviour only. No recording site SHALL alter the `AgentState` a run produces, the response a `POST /chat` request returns, or the propagation of an exception raised while handling it.
 
 #### Scenario: A request that succeeds
-- **WHEN** a `POST /chat` request is handled with metric recording in place
-- **THEN** the response status and body SHALL be identical to what the same request would produce with no recording site present
-- **AND** the `AgentState` the run produces SHALL be identical as well
+- **WHEN** a `POST /chat` request is handled
+- **THEN** every metric recording call site SHALL only read state the request has already established
+- **AND** SHALL NOT write to the `AgentState` or alter the response returned to the caller
 
 #### Scenario: A request raises
 - **WHEN** a `POST /chat` request raises while being handled, and its outcome is recorded on `chat_request_duration_seconds`
@@ -72,6 +72,7 @@ The system SHALL be scrapable by the bundled Prometheus at the path configured i
 - **WHEN** Prometheus scrapes the backend at its configured `metrics_path`
 - **THEN** the scrape SHALL succeed
 - **AND** the `up` series for that target SHALL be 1
+- **AND** for as long as both Prometheus and that target are running, that series SHALL be continuous, with no sample absent from it
 
 #### Scenario: The metrics path is requested without a trailing slash
 - **WHEN** an HTTP GET is made to the metrics path without a trailing slash
@@ -87,11 +88,11 @@ The system SHALL provision a Grafana dashboard from a version-controlled JSON fi
 - **AND** querying that dashboard through Grafana's API SHALL report it as provisioned, naming the source file
 
 #### Scenario: Panel queries are evaluated against recorded data
-- **WHEN** the dashboard's panel queries are evaluated after load has been generated against the stack
+- **WHEN** the dashboard's panel queries are evaluated while traffic from the load generator still falls within each query's own lookback window
 - **THEN** every query-backed panel SHALL return a non-empty result
 
 #### Scenario: A ratio panel is evaluated before its numerator has ever occurred
-- **WHEN** a panel expressing a ratio is evaluated on a stack where the numerator's condition has never been recorded
+- **WHEN** a panel expressing a ratio is evaluated on a stack where no series has ever matched the numerator's label selector, so the numerator is absent rather than present at zero
 - **THEN** the panel SHALL render zero rather than "No data"
 
 ### Requirement: Trace and Log Correlation for a Single Request
