@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Placeholder Metric Instruments for Key Metrics
-The system SHALL record `/chat` request latency and classified-intent counts with explicitly bounded label sets, and SHALL declare — without yet recording — instruments for LLM call duration and RAG retrieval rate. This supersedes the scaffold's requirement that all four instruments be declared but unrecorded.
+The system SHALL record all four key metrics with explicitly bounded label sets: `/chat` request latency, classified-intent counts, individual LLM call duration, and RAG context retrieval count. This supersedes the scaffold's requirement that all four instruments be declared but unrecorded.
 
 #### Scenario: A `/chat` request completes successfully
 - **WHEN** a `POST /chat` request completes without raising
@@ -19,10 +19,22 @@ The system SHALL record `/chat` request latency and classified-intent counts wit
 - **WHEN** a `POST /chat` request completes by any path whatsoever, including cancellation or timeout
 - **THEN** the recorded `status` label SHALL be either `ok` or `error`, and SHALL NOT take any other value
 
-#### Scenario: An instrument with no recording call site
-- **WHEN** the backend runs with `llm_call_duration_seconds` and `rag_retrieval_total` declared but having no recording call sites
-- **THEN** both SHALL remain importable from the module that declares them
-- **AND** `/metrics` SHALL still return successfully
+#### Scenario: An LLM call completes
+- **WHEN** a chat-model call made via `get_model().invoke(...)` completes, successfully or not
+- **THEN** the system SHALL record one observation on `llm_call_duration_seconds` carrying a `node` label and a `status` label
+- **AND** `node` SHALL be the name of the node whose span the call happened inside, or `unknown` where that name is no longer recoverable
+- **AND** `node` SHALL always be present, never omitted — a series identified by a missing label is not a permitted outcome
+- **AND** `status` SHALL be `ok` on success and `error` on failure
+
+#### Scenario: No third status value is ever produced on an LLM call
+- **WHEN** a chat-model call completes by any path whatsoever
+- **THEN** the recorded `status` label on `llm_call_duration_seconds` SHALL be either `ok` or `error`, and SHALL NOT take any other value
+
+#### Scenario: RAG context is retrieved
+- **WHEN** the `retrieve_context` node runs
+- **THEN** the system SHALL record one observation on `rag_retrieval_total` carrying an `intent` label
+- **AND** `intent` SHALL be the intent the classifier resolved for that request
+- **AND** the observation SHALL be recorded regardless of whether the retrieval itself succeeds
 
 ### Requirement: Automated Tests for Scaffolded Instrumentation
 The system SHALL include a test asserting that seeded counters appear on `/metrics` and that unseeded histograms do not. This supersedes the scaffold's requirement that the test assert all four declared instrument names appear.
@@ -30,8 +42,45 @@ The system SHALL include a test asserting that seeded counters appear on `/metri
 #### Scenario: Metrics endpoint test
 - **WHEN** the test suite runs
 - **THEN** a test SHALL assert that the seeded counters are present in the `/metrics` body
-- **AND** SHALL assert that `llm_call_duration_seconds` is absent — the one instrument with no recording call site anywhere, so no test ordering can populate it
+- **AND** SHALL assert that `llm_call_duration_seconds` is absent — this repository's `/chat` endpoint tests mock `api.main.graph` entirely, so no test ever invokes a real chat-model call through `OTelCallbackHandler`, regardless of that instrument having a recording call site
 - **AND** SHALL NOT assert the absence of `chat_request_duration_seconds`, because `/metrics` is process-global state and earlier tests in the same session record into it
+
+### Requirement: LangGraph/LangChain Span Instrumentation via Callback Handler
+The system SHALL provide a `BaseCallbackHandler` (`OTelCallbackHandler`) that translates LangChain/LangGraph node, LLM, and tool callback events into spans, registered once at graph-invocation time, without requiring modifications to `backend/agent/graph.py` or `backend/agent/nodes.py`, and without altering the `AgentState` produced by a run or the propagation of exceptions raised during it. Span names SHALL identify an operation type, never a specific occurrence, and span attributes SHALL be limited to values a query would plausibly filter or group by — never the full text of a request's user input, a model's output, or any other free-text `AgentState` payload field. This supersedes the scaffold's requirement only by specifying what its span names and attributes must satisfy; the scaffold left both undecided.
+
+#### Scenario: A node completes successfully
+- **WHEN** a graph run invokes a node (e.g. `classify_intent`) with `OTelCallbackHandler` registered via invocation `config`, and the node returns normally
+- **THEN** the system SHALL emit a span covering that node's execution, opened in `on_chain_start` and closed in `on_chain_end`
+- **AND** the returned `AgentState` SHALL be identical to what the same run would produce without the handler registered
+
+#### Scenario: A node raises an exception
+- **WHEN** a node raises an exception during execution while `OTelCallbackHandler` is registered
+- **THEN** the system SHALL end the span for that node via `on_chain_error`
+- **AND** SHALL NOT interfere with the original exception propagating unchanged, so existing routing/error-handling behavior is unaffected
+
+#### Scenario: An LLM call within a node produces a nested span
+- **WHEN** a node invokes the chat model as a LangChain Runnable (e.g. inside `classify_intent` or `generate_response`)
+- **THEN** the system SHALL emit a span for that LLM call, opened in `on_llm_start` and closed in `on_llm_end` (or `on_llm_error` on failure), nested under the enclosing node's span
+
+#### Scenario: A span name identifies an operation type, not an occurrence
+- **WHEN** any span is opened for a node, an LLM call, or a tool call
+- **THEN** its name SHALL be the same for every invocation of that node, that LLM-call type, or that tool
+- **AND** SHALL NOT be built from user input, model output, or any other per-request value
+
+#### Scenario: Node spans carry the request's classified intent, once known
+- **WHEN** a node span is opened for `classify_intent` itself, or for any node that executes after `classify_intent` has resolved an intent
+- **THEN** that span SHALL carry an `intent` attribute once the intent is known — set from the node's own output for `classify_intent`, and from `AgentState` for every node afterward
+- **AND** its value SHALL belong to the same bounded set `chat_request_duration_seconds`'s `intent` label uses, and SHALL agree with the value recorded on that metric for the same request
+- **AND** a span opened before an intent is known SHALL carry no `intent` attribute, rather than a placeholder value outside that set
+
+#### Scenario: The chat-model span uses OpenTelemetry's GenAI attribute names
+- **WHEN** a span is opened for a chat-model call (`on_llm_start`/`on_chat_model_start`)
+- **THEN** it SHALL carry `gen_ai.provider.name`, `gen_ai.request.model`, and `gen_ai.operation.name`, using OpenTelemetry's GenAI semantic-convention attribute keys rather than invented ones
+- **AND** SHALL NOT carry the prompt or the completion text
+
+#### Scenario: No span carries free-text request or response content
+- **WHEN** any span opened by `OTelCallbackHandler` — node, chat-model, or tool — is closed
+- **THEN** none of its attributes SHALL contain the request's user input, the model's output, or any other free-text `AgentState` payload field (e.g. retrieved context, a tool's raw response)
 
 ## ADDED Requirements
 
@@ -55,6 +104,7 @@ The system SHALL seed every counter instrument at zero from a hook invoked after
 - **WHEN** the backend has started and no `POST /chat` request has been handled
 - **THEN** `/metrics` SHALL expose each counter at 0
 - **AND** `intent_classification_total` SHALL be exposed for every valid intent crossed with every value of its `fallback` label
+- **AND** `rag_retrieval_total` SHALL be exposed for every valid intent
 - **AND** none of the histogram instruments this system declares SHALL be exposed
 
 #### Scenario: Seeding is attempted before the provider is installed
