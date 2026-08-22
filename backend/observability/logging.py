@@ -16,13 +16,16 @@ class TraceCorrelationFilter(logging.Filter):
         return True
 
 
-def configure_logging() -> None:
+def build_json_handler() -> logging.Handler:
     handler = logging.StreamHandler()
     handler.setFormatter(
         JsonFormatter("%(asctime)s %(levelname)s %(name)s %(message)s")
     )
     handler.addFilter(TraceCorrelationFilter())
+    return handler
 
+
+def configure_logging() -> None:
     root_logger = logging.getLogger()
-    root_logger.handlers = [handler]
+    root_logger.handlers = [build_json_handler()]
     root_logger.setLevel(logging.INFO)
