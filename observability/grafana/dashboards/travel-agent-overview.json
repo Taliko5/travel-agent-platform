@@ -2,7 +2,7 @@
   "id": null,
   "uid": "travel-agent-overview",
   "title": "Travel Agent — Overview",
-  "description": "chat/latency, intent distribution, error and fallback rates, and histogram bucket placement for the travel agent backend.",
+  "description": "chat/latency, intent distribution, error and fallback rates, histogram bucket placement, LLM call duration by node, and RAG retrieval rate for the travel agent backend.",
   "tags": ["travel-agent", "step8"],
   "timezone": "browser",
   "schemaVersion": 39,
@@ -236,18 +236,78 @@
     },
     {
       "id": 7,
-      "type": "text",
-      "title": "Declared-but-unrecorded instruments",
-      "gridPos": { "x": 0, "y": 33, "w": 24, "h": 6 },
-      "options": {
-        "mode": "markdown",
-        "content": "## Declared but not yet recorded\n\n`llm_call_duration_seconds` and `rag_retrieval_total` are declared in `backend/observability/metrics.py` but have no `.record()`/`.add()` call sites yet, so they are absent from `/metrics`. This is the remaining Section 9-a work (see `openspec/changes/step8-observability-scaffold/tasks.md`), not a bug in this dashboard.\n\n`rag_retrieval_total` is *not* missing for lack of seeding — `metrics.py` does call `rag_retrieval_count.add(0)`, but that seed is silently discarded (an import-order issue: the counter is created before `set_meter_provider()` runs; see `tasks.md` Section 9 for the root cause and the agreed fix). The accurate statement is simply that these two instruments have no recording call sites yet.\n\nSeparately: **no** application metric appears on `/metrics` at all until the first `/chat` request after a restart. On a freshly restarted backend with no traffic, `/metrics` returns only the ten default `python_*` / `process_*` series. This is expected, not a sign the instrumentation is broken."
-      },
+      "type": "timeseries",
+      "title": "LLM call duration by node (mean, successful calls)",
+      "description": "Which phase of a request — classification, city extraction, or generation — is the slow one. `node` exists on `llm_call_duration_seconds` precisely because those three don't share a latency distribution (design.md D15).\n\nPlotted as `_sum / _count`, not `histogram_quantile`. Panel 2 already established what `histogram_quantile` does to this project's data at 12-20 observations per 5-minute window — bucket-width interpolation reporting a value no request actually produced. This instrument has *fewer* observations per node per window than `chat_request_duration_seconds` had per intent (`call_weather_tool`: 15 observations in the entire calibrating run, not per window), so the same artefact is worse here, not better. `_sum/_count` is what panel 2's own description called \"the honest comparison\" for that reason — this panel plots it directly rather than relegating it to prose.\n\n`status=\"ok\"` filters for the same reason panels 1/2 do: a fast client-side failure would drag every node's mean down at the exact moment something breaks. Panel 1 accepts that filter only because panel 4 still counts what it hides, and the same condition has to hold here — panel 9 is what counts the failed model calls this panel excludes. Without it the filter would be hiding observations nothing else showed.\n\nVerified 2026-08-22 against the 17:57:53-18:10:15 run (instant query inside the window): classify_intent 1.25s, call_weather_tool 1.06s, generate_response 4.98s. `_sum`/`_count` are separate series from `_bucket`, unaffected by the bucket-boundary re-tune (design.md D18) that happened after that run, so these figures carry none of the \"old `le` values only\" caution a bucket query against that window would.\n\nDeliberately not a heatmap: D18's boundaries were re-tuned after the only run this instrument has seen, so there is no post-retune data yet to check them against. Add one once a run exists to show it against.\n\nEmpty until the first real LLM call after a restart — `llm_call_duration_seconds` is a histogram, and histograms are never seeded (design.md D2), unlike the seeded counters elsewhere on this dashboard, which appear from the first scrape.",
+      "gridPos": { "x": 0, "y": 33, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": { "unit": "s" },
         "overrides": []
       },
-      "targets": []
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (node) (rate(llm_call_duration_seconds_sum{status=\"ok\"}[5m])) / sum by (node) (rate(llm_call_duration_seconds_count{status=\"ok\"}[5m]))",
+          "legendFormat": "{{node}}",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "RAG retrieval rate as a fraction of all requests",
+      "description": "Retrieval only happens on some routing branches (`general`, and `transportation` without a flight keyword) — a raw `rate(rag_retrieval_total[5m])` answers \"how often does retrieval fire\" with no scale to judge it against. Read against request volume instead, the same ratio framing panels 4/5 already use for the same reason.\n\nUnlike panels 4/5, this numerator does not need its guard to survive a healthy stack — `rag_retrieval_total` is seeded across all four `VALID_INTENTS` values from startup (design.md D17), so the numerator is a real, computable zero on a stack where retrieval hasn't fired, never an absent vector the way `intent_classification_total{fallback=\"true\"}` was before its own seeding fix. Verified directly: the numerator alone, unguarded, returned `0.0211` against the calibrating run below — non-empty, confirming the guard isn't load-bearing here. Kept anyway for the one case seeding can't cover: no traffic in the window at all makes both sides `0/0`, undefined — same \"gap means no traffic, not a claim something is broken\" reading as panels 4/5.\n\nVerified 2026-08-22 against the 17:57:53-18:10:15 run (instant query inside the window): 0.2727 — roughly 27% of that run's traffic, consistent with `general` (25% of the run, always routed to `retrieve_context`) plus the share of `transportation` requests that happened not to hit a flight keyword.\n\nNot broken down by intent. `rag_retrieval_total` only ever moves for two of the four intents; a per-intent version of this ratio would show two flat lines at 0 alongside two moving ones, restating the routing branches panel 3 already shows rather than answering a new question.",
+      "gridPos": { "x": 12, "y": 33, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit" },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "(sum(rate(rag_retrieval_total[5m])) or vector(0)) / sum(rate(chat_request_duration_seconds_count[5m]))",
+          "legendFormat": "retrieval ratio",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "LLM call error rate",
+      "description": "Fraction of chat-model calls that raised. This panel is what makes panel 7's `status=\"ok\"` filter legitimate rather than merely convenient: panel 1 filters the same way and says so explicitly — \"panel 4 owns 'is it broken'\" — and until this panel existed, `llm_call_duration_seconds`'s error observations were recorded by `on_llm_error` and shown nowhere. A node whose model calls failed outright would have left panel 7 drawing a calm mean of the survivors.\n\nThe numerator-only `or vector(0)` is the same construction as panels 4 and 5, for the same reason: histograms are never seeded (design.md D2), so `{status=\"error\"}` does not exist at all until a call actually fails, and an unguarded numerator would make this panel read \"No data\" for exactly as long as nothing is wrong.\n\nAggregate, not `by (node)`, and that is a constraint rather than a preference. `vector(0)` carries no labels, so it cannot match a grouped numerator — `sum by (node) (...) or vector(0)` would fall back to a single label-less series the moment every node was healthy, which is the case this panel most needs to render correctly. Panel 7's per-node means show *where* time goes; this one answers whether the model calls are failing at all.\n\nSame gap-versus-zero reading as panels 4 and 5: a flat zero line means calls were made and none failed; a gap means no model calls in the window, and the ratio is undefined rather than good.",
+      "gridPos": { "x": 0, "y": 41, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit" },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "(sum(rate(llm_call_duration_seconds_count{status=\"error\"}[5m])) or vector(0)) / sum(rate(llm_call_duration_seconds_count[5m]))",
+          "legendFormat": "llm error ratio",
+          "instant": false
+        }
+      ]
     }
   ]
 }
