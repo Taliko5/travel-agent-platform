@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 
 import prometheus_client
 from fastapi import FastAPI
@@ -24,7 +25,7 @@ load_dotenv()
 
 from agent.graph import build_graph  # noqa: E402
 from observability.callback_handler import OTelCallbackHandler  # noqa: E402
-from observability.logging import configure_logging  # noqa: E402
+from observability.logging import build_json_handler, configure_logging  # noqa: E402
 
 
 resource = Resource.create(
@@ -62,7 +63,22 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 
-app = FastAPI(title="travel agent API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Runs after uvicorn's own Server has finished its logging setup (ASGI
+    # lifespan startup fires once the server is otherwise ready), so this
+    # reconfiguration can't be clobbered by uvicorn configuring these loggers
+    # later — unlike a module-import-time call, whose ordering relative to
+    # uvicorn's own setup isn't guaranteed. See uvicorn-structured-logging
+    # design.md D2.
+    for logger_name in ("uvicorn.access", "uvicorn.error"):
+        uvicorn_logger = logging.getLogger(logger_name)
+        uvicorn_logger.handlers = [build_json_handler()]
+        uvicorn_logger.propagate = False
+    yield
+
+
+app = FastAPI(title="travel agent API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],

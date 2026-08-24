@@ -6,7 +6,7 @@ from rag.retriever import retrieve_context
 from mcp_servers.weather_server import get_weather
 from mcp_servers.flight_server import search_flights
 from mcp_servers.hotel_server import search_hotels
-from observability.metrics import intent_classification_count
+from observability.metrics import intent_classification_count, rag_retrieval_count
 
 load_dotenv()
 
@@ -49,7 +49,13 @@ def classify_intent(state: AgentState) -> AgentState:
 
 def retrieve_context_node(state: AgentState) -> AgentState:
     """Retrieve relevant travel context from ChromaDB."""
-    context = retrieve_context(state["user_input"])
+    try:
+        context = retrieve_context(state["user_input"])
+    finally:
+        # An attempt, not a success count — design.md D17. In `finally` so
+        # recording cannot decide whether the retrieval runs, matching how
+        # `/chat` records its own duration.
+        rag_retrieval_count.add(1, {"intent": state["intent"]})
     return {
         **state,
         "context": context,

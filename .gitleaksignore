@@ -1,0 +1,36 @@
+# gitleaks 8.24.3 fingerprint suppressions.
+#
+# One entry below, for one finding. gitleaks/gitleaks-action@v2's
+# curl-auth-user rule (config/gitleaks.toml in the gitleaks repo, regex
+# requires the word "curl" and the -u/--user flag near each other) fires on
+# .9d-evidence/raw.md line 260, in commit 2424b8f (PR #9): that line records
+# an API call made with Grafana's documented, unchanged default login for
+# this local-only stack (same value already printed in plain sight in
+# docs/step8.md's "Running Locally"). Deliberately not reproduced here in a
+# shape the same rule would also match on this file. The rule matches shape,
+# not value, and there is no credential in that line to rotate.
+#
+# See docs/plan.md's Step 9 section for the separate, real decision this
+# finding is not: Grafana's default login stops being harmless the moment
+# the stack is no longer localhost-only.
+#
+# Format is gitleaks' own (detect/detect.go AddGitleaksIgnore, 8.24.3):
+# commit:file:rule-id:start-line, one per line, #-prefixed comments and
+# blank lines skipped. This is not a .gitleaks.toml allowlist on purpose —
+# a TOML config, if one existed, would replace gitleaks' entire default rule
+# set rather than add to it (`gitleaks detect --help`, the -c/--config
+# precedence it documents), which is a far wider footprint than one commit's
+# one line needs. .gitleaksignore suppresses by exact fingerprint only and
+# touches no rule.
+#
+# The file was later renamed to docs/step8-9d-evidence.md (commit 0589c29).
+# Checked, not assumed: git recorded that as a detected rename (R060), and
+# gitleaks' own PR-scan range (--log-opts="--no-merges --first-parent
+# <base>^..<head>", gitleaks-action's src/gitleaks.js) does not re-surface
+# the line under the new path — verified locally against gitleaks 8.24.3
+# with the exact base/head commit range CI used for PR #9: one finding,
+# same as CI, suppressed by the entry below. If a future gitleaks version or
+# git config ever stops detecting that rename, a second entry (new commit
+# SHA, docs/step8-9d-evidence.md, line 260) would be needed here; nothing
+# today requires one.
+2424b8f12f4ad9dab9fa8be7c7fa01af45ae0109:.9d-evidence/raw.md:curl-auth-user:260

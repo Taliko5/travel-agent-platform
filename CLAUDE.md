@@ -149,6 +149,46 @@ tracked (`# TODO: no recording call sites yet — tasks.md Section 9-a`).
 This rule does not apply to docstrings, or to tool directives such as `# noqa:`, `# type: ignore`
 and `# pragma:`. Never delete a `# noqa` to save a line — it changes lint behaviour.
 
+## Working Agreement
+
+Each rule below was learned by breaking it once.
+
+**Commits belong to the user.** Never run `git add`, `git commit`, `git stash` or `git checkout`
+— `stash` and `checkout` are named explicitly because forbidding only `commit` doesn't protect
+the working tree. Leave every change in place and report it.
+
+**Report evidence, not conclusions.** Quote the command run and its actual output. Reports get
+checked against the repository afterward, so a fluent summary that omits the output is worth
+less than the raw lines.
+
+**Stop rather than improvise.** A failing check, or a doc whose stated expectation contradicts
+what the system does, is something to report and stop on — not fix, not scope-widen, not paper
+over with a different command that happens to succeed.
+
+**Surgical edits stay surgical.** When a prompt names a passage to replace, change that passage
+and nothing else — no reflowing, no reformatting adjacent lines, no improving prose nobody
+mentioned. Fenced code blocks in replacement text are the known hazard: twice written in with
+their fences stripped and column alignment collapsed, once merging four lines into one.
+
+**Never restate figures.** A measurement and its provenance live in exactly one place; add a
+pointer, not a copy — this repo already carries a case where a second copy of a number drifted
+from the first and cost a day to unpick.
+
+**Specifications state requirements, not mechanisms.** Write the spec before verifying against
+it — a requirement derived afterward from what was observed cannot fail. Where the
+implementation has an incidental behaviour nobody designed, specify what must hold, not what
+happens to happen.
+
+**Two operations are destructive and need an explicit instruction every time, not a standing
+one.** `docker-compose down -v` destroys `prometheus_data`, which holds observability history
+that cannot be regenerated. `scripts/generate_load.py` consumes Gemini free-tier quota and takes
+about thirteen minutes.
+
+These exist because prompts arrive from a separate session that cannot reach `localhost` — no
+Docker, no `:8000`, no `:9090`, no `:3001`. Every live check falls to Claude Code, and every
+report is checked afterward by reading the repository directly. The rules above are what make
+that division workable.
+
 ## Docs
 
 - `docs/plan.md` — step-by-step roadmap and progress
