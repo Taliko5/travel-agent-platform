@@ -112,3 +112,5 @@ Key metrics: `/chat` latency (p50/p95/p99), intent distribution, LLM call durati
 Options: ECS (simpler) or EKS (matches k8s manifests from Step 5). Infrastructure via Terraform: VPC, cluster, ECR, ALB.
 
 Prerequisites: Steps 5 and 7 complete (Docker image + CI pushing to ECR).
+
+Open item carried from Step 8: Grafana runs on its unchanged default login (`admin`/`admin`, printed in `docs/step8.md`'s "Running Locally"). Harmless while `grafana` is bound to `localhost` only, as it is today — it stops being harmless the moment this deployment exposes it past that. Decide the real credential (env-injected admin password at minimum, an actual auth provider if this ever needs more than one user) as part of this step, before `grafana` is reachable from anywhere but a developer's own machine.
