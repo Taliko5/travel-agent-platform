@@ -37,6 +37,20 @@ This starts `backend`, `frontend`, `prometheus` (port `9090`), and `grafana` (po
 
 To reset all observability data (as opposed to a plain restart, which preserves it): `docker-compose down -v`.
 
+### Generating load
+
+The Grafana panels use `rate()`, which needs several scrape intervals of data before it reads as anything but broken. Hand-issued `curl` calls do not produce enough points.
+
+```bash
+backend/venv/bin/python scripts/generate_load.py 2>&1 | tee /tmp/load-$(date +%Y%m%d-%H%M).log
+```
+
+Defaults are 60 requests, concurrency 1, and 6 seconds between requests — about 10 requests/minute, which stays inside the Gemini free tier's rate limit. A full run takes roughly 13 minutes — `--delay` is the gap *between* requests and each request itself takes about 7 seconds, so 60 × (7 + 6) seconds. It is not hanging. `--requests`, `--concurrency`, `--delay` and `--base-url` override them; do not raise the rate unless the key in `backend/.env` is a paid one.
+
+Keep the log. The 2026-08-12 run's stdout was not saved — `docs/step8-host-network.md` records what that cost.
+
+The explicit interpreter path is required: the script needs `httpx`, which is installed in the backend's virtualenv rather than in the system interpreter. On macOS, wrap the command in `caffeinate -dimsu` and leave the lid open — a run interrupted by the machine sleeping produces data that is indistinguishable from a network failure, which is what happened on 2026-08-12. `docs/step8-host-network.md` has that case.
+
 ## Scaffolded vs. Yours
 
 **Scaffolded (this change):**
@@ -51,9 +65,23 @@ To reset all observability data (as opposed to a plain restart, which preserves 
 - Final metric names and label sets for the four key metrics — wire the actual `.record()`/`.add()` calls at the call sites marked with `# TODO (user)` in `backend/observability/metrics.py`. Histogram bucket boundaries have provisional starting values but remain yours to tune once real latency data is available
 - Real span names/attributes for the events `OTelCallbackHandler` receives (currently marked `# TODO (user)` in `backend/observability/callback_handler.py`) — e.g. what belongs on the `classify_intent` span vs. `generate_response` vs. the nested LLM-call span
 - Grafana dashboards in `observability/grafana/dashboards/` (drop-in JSON is auto-provisioned via `observability/grafana/provisioning/dashboards/default.yml`)
-- Getting the pipeline showing real, meaningful data end-to-end and debugging any gaps
+- Getting the pipeline showing real, meaningful data end-to-end and debugging any gaps — done, see "Verified End-to-End" below
 - Evaluating whether LangSmith is worth adopting alongside or instead of the hand-rolled spans (see below)
 - CloudWatch log **shipping** — deferred to Step 9 (needs an AWS account/log group). The structured JSON logging added here is the prep work; shipping itself (log group, IAM role, `awslogs`/FireLens driver config) is not in scope now.
+
+## Verified End-to-End
+
+Checked on 2026-08-21 against the controlled load run of 2026-08-19, rather than against fresh traffic. Every command and its raw output is in `docs/step8-9d-evidence.md`; none of it is repeated here.
+
+This was a conformance check rather than a walkthrough. Each item decided whether the system satisfies a named scenario in `openspec/changes/step8-metric-design/specs/observability/spec.md`; the procedure, its entry gates and its stop rule are Section 2 of that change's `tasks.md`.
+
+**What holds.** `/metrics/` exposes the recorded instruments and the seeded counters, and the instrument with no recording call site is absent. The path without a trailing slash redirects, and a redirect-following client reaches the metrics — which is what the Prometheus scrape config relies on. The scrape target is up and its `up` series is unbroken across the run window; that was established by counting raw stored samples, because evaluating the selector at intervals cannot tell a short gap from a continuous series. Every query the dashboard runs returns data when evaluated inside the run window, and the error-rate panel's guard was confirmed to be the one actually doing work, its numerator having no series at all. Grafana serves the dashboard from its file provider and reports it as provisioned. No HTTP spans are emitted for `/health` or `/metrics` — checked over the container's whole lifetime, not only an idle window.
+
+**What did not hold.** Request-level log correlation failed as that requirement was then written. Enumerating every log line one `/chat` request emits — rather than the two the procedure originally named — found one line without the request's `trace_id`: the access line uvicorn writes for the request. That same line is the only one in the stream that is not JSON, and the two facts turned out to be the same fact — `uvicorn.access` sets `propagate=False` and keeps its own handler, so the line never reaches the handler that stamps `trace_id` onto a record.
+
+Two things followed from it. The requirement was too wide: the scaffold's `Structured Logging with Trace Correlation` already permits a null `trace_id` on a line emitted with no span active, so demanding a non-null one on every line contradicted it. That scenario now scopes to lines emitted through the application's configured logging handler while the span is active. Correcting it relocated the failure rather than removing it — uvicorn's line is not JSON at all, which the scaffold's requirement does not survive. `openspec/changes/uvicorn-structured-logging` closes that by routing those loggers through the same handler, and its live check settled something this document first got wrong: uvicorn emits the access line from inside the ASGI send path, not after the request's span has ended, so once the line reaches the handler it carries the request's own `trace_id` and `span_id`. Null appears only on `/health` and `/metrics`, which are excluded from instrumentation and so have no span to correlate with at all.
+
+**What was not verified.** Counter seeding on a cold start needs a restart, and restarting the backend would have destroyed the run being verified. No `/chat` request failed during that run, so the error path was never observed. Both are recorded as out of scope in the procedure rather than left ambiguous.
 
 ## LangSmith as an Alternative
 
