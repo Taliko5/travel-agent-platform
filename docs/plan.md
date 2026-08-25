@@ -11,8 +11,9 @@
 | 5 | Docker + docker-compose + k8s manifests | Done |
 | 6 | Frontend — Next.js 14 / TypeScript | Done |
 | 7 | GitHub Actions CI/CD | Done |
-| 8 | Observability (Grafana, Prometheus, OpenTelemetry) | Planned |
-| 9 | AWS deployment (ECS / EKS) | Planned |
+| 8 | Observability (Grafana, Prometheus, OpenTelemetry) | Done |
+| 9 | Azure deployment (AKS) | Planned |
+| 10 | Port to AWS (EKS) | Planned |
 
 ---
 
@@ -107,10 +108,28 @@ Key metrics: `/chat` latency (p50/p95/p99), intent distribution, LLM call durati
 
 ---
 
-## Step 9: AWS Deployment
+## Step 9: Azure Deployment (AKS)
 
-Options: ECS (simpler) or EKS (matches k8s manifests from Step 5). Infrastructure via Terraform: VPC, cluster, ECR, ALB.
+Deploy the containerized stack to Azure Kubernetes Service, with the infrastructure defined in Terraform.
 
-Prerequisites: Steps 5 and 7 complete (Docker image + CI pushing to ECR).
+**Why AKS, and not ECS or EKS.** The earlier version of this section offered ECS ("simpler") or EKS ("matches the k8s manifests from Step 5"). The second reason did not survive inspection: `Infrastructure/k8s/` holds two files covering the backend alone, out of the four services `docker-compose.yaml` runs, and every line of them changes on the way to a managed cluster anyway — image reference, secret source, service type. What genuinely carries between clouds is Kubernetes itself: Deployment, Service, Ingress, HPA, probes, `kubectl`. That layer is identical on AKS, EKS and GKE. The layer that does not carry is the cloud-specific one — network, identity, registry, ingress controller, log sink. AKS is a given for this step rather than a conclusion argued here; what is worth recording is that the choice decides only that second layer, and that Step 10 exists to prove the first layer really does move.
 
-Open item carried from Step 8: Grafana runs on its unchanged default login (`admin`/`admin`, printed in `docs/step8.md`'s "Running Locally"). Harmless while `grafana` is bound to `localhost` only, as it is today — it stops being harmless the moment this deployment exposes it past that. Decide the real credential (env-injected admin password at minimum, an actual auth provider if this ever needs more than one user) as part of this step, before `grafana` is reachable from anywhere but a developer's own machine.
+**The deliverable is the repository, not a running URL.** This step produces Terraform, manifests and documentation; the cluster is raised on demand and torn down afterwards rather than left running. A public URL would show the chat UI, which is the one thing this step does not build — the network, the cluster and the deployment pipeline that it does build are legible in the Terraform and in a verification record of the kind `docs/step8-9d-evidence.md` already sets a precedent for. Keeping the cluster ephemeral also keeps `POST /chat` off the open internet, which matters while it has no authentication, no rate limit and no request deadline (`chat-request-deadline` is still a proposal).
+
+**The cluster is assembled by hand, not with AKS Automatic.** Automatic provisions nodes and ingress on the cluster's behalf; assembling ingress and workload identity directly costs more work, but keeps the network, identity and ingress decisions explicit and under version control instead of delegated to a managed default that cannot be inspected or altered later.
+
+Open questions this step has to settle, before any billable resource is created:
+
+- Where observability lives. Prometheus holds local history that a new cluster does not inherit. The choice is between lifting the Prometheus/Grafana pair into the cluster, deferring to Azure Monitor, or leaving it local and out of this step entirely.
+- Container CPU and memory monitoring, which no orchestrator supplies for free, and what enabling it costs.
+- Grafana's credentials. It still runs on its unchanged default login (`admin`/`admin`, printed in `docs/step8.md`'s "Running Locally"). Harmless only while `docker-compose.yaml` binds its published port to `127.0.0.1`, which that file now states explicitly rather than leaving to Docker's default — an earlier version of this line asserted a loopback binding the file did not actually have, and the claim went unchecked. It stops being harmless the moment anything exposes it past that. Decide the real credential before `grafana` is reachable from anywhere but a developer's own machine.
+
+Prerequisites: Steps 5 and 7 complete (Docker images, CI). Two pieces of earlier work were written against AWS and need redirecting rather than reusing: the image push job drafted in `docs/step7.md`'s "Step 9 extension" targets ECR, and Step 8's structured JSON logging was justified by CloudWatch's line-oriented ingestion. The logging work itself still stands — the sink changes, the format does not — but the requirement naming CloudWatch lives in `openspec/`, and moving it needs a change of its own rather than an edit here.
+
+---
+
+## Step 10: Port to AWS (EKS)
+
+Take the Step 9 workload to EKS. The Kubernetes manifests should cross unchanged; the Terraform, the identity model, the registry and the log sink will not.
+
+Deferred on purpose. The value of this step is the port itself — a repository that demonstrates portability instead of asserting it — and a port has nothing to demonstrate until there is a Step 9 to port from.

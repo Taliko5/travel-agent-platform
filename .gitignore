@@ -47,6 +47,7 @@ yarn-error.log*
 
 # local env files
 .env*.local
+observability/grafana/.env
 
 # vercel
 .vercel
