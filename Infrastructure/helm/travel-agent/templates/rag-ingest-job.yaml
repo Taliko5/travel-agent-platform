@@ -1,0 +1,51 @@
+# Populates the PVC before the backend Deployment starts (design.md D11,
+# task 3.9/3.10). Helm blocks on hook completion, so this Job releases the
+# ReadWriteOnce volume before the Deployment's pod tries to mount it — the
+# two are sequenced, never concurrent.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: travel-agent-rag-ingest
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: travel-agent-rag-ingest
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      restartPolicy: Never
+      containers:
+        - name: rag-ingest
+          image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
+          imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+          command: ["python", "rag/ingest.py"]
+          env:
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keyVault.k8sSecretName }}
+                  key: {{ .Values.keyVault.secretKey }}
+          volumeMounts:
+            # Same unread-but-required mount as backend-deployment.yaml —
+            # triggers the CSI sync that produces the Secret above.
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
+            - name: chroma-data
+              mountPath: /app/rag/chroma_db
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: travel-agent-secrets-spc
+        - name: chroma-data
+          persistentVolumeClaim:
+            claimName: travel-agent-chroma-db

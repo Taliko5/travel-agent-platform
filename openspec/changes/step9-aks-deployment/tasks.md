@@ -56,19 +56,44 @@ These change what gets written. Each is a documentation read, not a cloud operat
 
 Lands at `Infrastructure/helm/travel-agent/` (D13). `Infrastructure/k8s/`'s two files become templates here and that directory is removed.
 
-- [ ] 3.1 Create `Chart.yaml` and `values.yaml`. `values.yaml` declares, at minimum: image repository and tag, the backend's accepted CORS origins, the frontend's API base URL, replica counts, and resource requests and limits for both containers.
-- [ ] 3.2 Port `Infrastructure/k8s/backend-deployment.yaml` and `backend-service.yaml` to templates, substituting the hardcoded `image: travel-agent-backend:latest` and the CORS origin with values. Service stays `ClusterIP`.
-- [ ] 3.3 Add frontend Deployment and Service templates (D1). Service stays `ClusterIP`.
-- [ ] 3.4 Add resource requests and limits to both containers (D14). Requests are what make a capacity shortfall surface as a scheduling decision rather than as contention; Section 9 measures whether the values chosen here are right.
-- [ ] 3.5 Add the ServiceAccount template carrying the workload-identity annotation, and the pod-template label the platform requires for identity injection (D5).
-- [ ] 3.6 Add the `SecretProviderClass` template binding the vault and the secret name, and whatever volume mount task 1.1 established is required for the Kubernetes Secret to materialise (D5).
-- [ ] 3.7 Add the `Gateway` and `HTTPRoute` templates (D2). Keep the provider binding — gateway class name and load-balancer annotations — in `values.yaml`, so the routing rules themselves carry to another provider unchanged.
-- [ ] 3.8 Annotate the `Gateway` onto an internal load balancer (D2). The entry point must have no public address.
-- [ ] 3.9 Add the vector-store templates: whichever of Chroma-in-server-mode or a single-replica volume Section 3.10 decides, plus the ingestion step that populates it, expressed as part of the chart rather than as an operator command (D11).
-- [ ] 3.10 Decide server mode versus single-replica volume, and record the decision and its reason in `design.md` D11, closing that Open Question. `design.md` deliberately left this to implementation; the spec requires only that no replica holds the corpus locally and that no manual post-deploy command is needed.
-- [ ] 3.11 Delete `Infrastructure/k8s/`. Do not repoint the path references in `docs/step5.md` or `docs/plan.md` — `proposal.md`'s Non-Goals records why those are records, not stale text.
-- [ ] 3.12 Run `helm template` over the chart with a representative values file and pipe it to `kubectl apply --dry-run=client`. Record the output. This is the lint step the loose YAML never had.
-- [ ] 3.13 Read the rendered routing resources against a port to another managed Kubernetes provider, and record exactly which fields would have to change. The set must be limited to the gateway class name and the provider annotations; anything else in it means a provider detail leaked into a routing rule, and is fixed here rather than left for Step 10 to discover.
+- [x] 3.1 `Infrastructure/helm/travel-agent/Chart.yaml` and `values.yaml` created. `values.yaml` declares image repository/tag, `backend.corsAllowedOrigins`, `frontend.apiUrl`, `replicaCount`, and `resources` for both containers, plus the ServiceAccount/Key Vault/Gateway coordinates later tasks need — all empty-string or same-as-today defaults, so a bare `helm template` with no overrides renders without a real Azure identifier anywhere.
+- [x] 3.2 `templates/backend-deployment.yaml` and `backend-service.yaml` port the two `Infrastructure/k8s/` files: `image` and `CORS_ALLOWED_ORIGINS` now read from values, `backend-service.yaml` is otherwise byte-for-byte the same Service, still `ClusterIP`.
+- [x] 3.3 `templates/frontend-deployment.yaml` and `frontend-service.yaml` added (D1). No runtime env var — `NEXT_PUBLIC_API_URL` is a build-time value (D1, task 1.4), so there is nothing for this Deployment to configure at runtime. Service is `ClusterIP`.
+- [x] 3.4 Both Deployments carry `resources.requests`/`resources.limits` from `values.yaml` (`resources.backend`, `resources.frontend`) — done inline while writing 3.2/3.3 rather than as a separate pass, since the field lives in the same container spec.
+- [x] 3.5 `templates/backend-serviceaccount.yaml` added, annotated `azure.workload.identity/client-id` from `values.yaml`. The backend Deployment's pod template gained `serviceAccountName` and the `azure.workload.identity/use: "true"` label (D5).
+- [x] 3.6 `templates/secretproviderclass.yaml` added: `secretObjects` syncs the vault's `google-api-key` into the `travel-agent-secrets` Kubernetes Secret the existing `secretKeyRef` already reads; `parameters` use the Workload ID access mode (`usePodIdentity: "false"`, `clientID` from values, no `useVMManagedIdentity`). The backend Deployment gained the CSI `volumeMounts`/`volumes` block task 1.1 established is required, with that task's one-line comment carried onto the mount (D5).
+- [x] 3.7 `templates/gateway.yaml` and `httproute.yaml` added (D2): one `Gateway` with two named listeners (frontend/backend), each with its own `HTTPRoute` by hostname. `gatewayClassName` and `spec.infrastructure.annotations` are the only fields sourced from `values.yaml`'s `gateway.*` — everything else (`apiVersion`, `kind`, `listeners`, `parentRefs`, `hostnames`, `backendRefs`) is upstream Gateway API.
+- [x] 3.8 Satisfied by 3.7's default: `values.yaml`'s `gateway.internalAnnotations` sets `service.beta.kubernetes.io/azure-load-balancer-internal: "true"` as the *default*, not an opt-in, so a plain render has no public address without anyone remembering to ask for one.
+- [x] 3.9 `templates/chroma-pvc.yaml` (a `ReadWriteOnce` PVC) and `templates/rag-ingest-job.yaml` (a `pre-install,pre-upgrade` Helm hook running `python rag/ingest.py` against that PVC, reusing the backend image, ServiceAccount and CSI mount) added, per 3.10's decision (D11).
+- [x] 3.10 Decided and recorded in `design.md` D11: a single-replica `ReadWriteOnce` PVC, not a standalone Chroma server. One backend replica removes the reason a server was proposed for ("multi-replica pods can't share a named volume"), and a server would touch `backend/rag/retriever.py` — this step's Impact line names only two application-code changes (CORS, frontend build arg), and this isn't a third. Ingestion runs as a Helm hook rather than an operator command, sequenced before the Deployment mounts the same volume — Helm blocks on hook completion, so the two never mount concurrently. Open Questions' "Chroma server mode versus single-replica PVC" bullet removed.
+- [x] 3.11 `Infrastructure/k8s/` deleted (`rm -r`). `docs/step5.md` and `docs/plan.md`'s path references to it are untouched, per `proposal.md`'s Non-Goals.
+- [x] 3.12 Rendered and dry-run validated:
+      ```
+      $ helm lint Infrastructure/helm/travel-agent -f Infrastructure/helm/travel-agent/values-example.yaml
+      [INFO] Chart.yaml: icon is recommended
+      1 chart(s) linted, 0 chart(s) failed
+      ```
+      `kubectl apply --dry-run=client` needs a reachable API server even for client-side validation of CRDs (Gateway/HTTPRoute/SecretProviderClass aren't in kubectl's built-in scheme) — no real cluster exists yet and none may be created outside the gate in Section 7, so a throwaway local `kind` cluster was used purely for schema recognition, with the two upstream CRD sets installed (Gateway API `v1.2.0`, Secrets Store CSI Driver's `SecretProviderClass`), then deleted immediately after. This is the same shape task 6.5 asks CI to do on PRs where no cloud credential exists — no Azure resource, no `az`, no `terraform` was touched.
+      ```
+      $ kind create cluster --name chart-lint
+      $ kubectl apply -f https://.../gateway-api/releases/download/v1.2.0/standard-install.yaml
+      $ kubectl apply -f https://.../secrets-store-csi-driver/.../secrets-store.csi.x-k8s.io_secretproviderclasses.yaml
+      $ helm template travel-agent Infrastructure/helm/travel-agent -f Infrastructure/helm/travel-agent/values-example.yaml | kubectl apply --dry-run=client -f -
+      serviceaccount/travel-agent-backend created (dry run)
+      persistentvolumeclaim/travel-agent-chroma-db created (dry run)
+      service/travel-agent-backend created (dry run)
+      service/travel-agent-frontend created (dry run)
+      deployment.apps/travel-agent-backend created (dry run)
+      deployment.apps/travel-agent-frontend created (dry run)
+      gateway.gateway.networking.k8s.io/travel-agent-gateway created (dry run)
+      httproute.gateway.networking.k8s.io/travel-agent-frontend created (dry run)
+      httproute.gateway.networking.k8s.io/travel-agent-backend created (dry run)
+      secretproviderclass.secrets-store.csi.x-k8s.io/travel-agent-secrets-spc created (dry run)
+      job.batch/travel-agent-rag-ingest created (dry run)
+      $ kind delete cluster --name chart-lint
+      ```
+      All 11 rendered objects validate, both with the example overrides and with bare `values.yaml` defaults (re-run, same 11 lines).
+- [x] 3.13 Read the rendered `Gateway`/`HTTPRoute` against a port to EKS: exactly two things change — `spec.gatewayClassName` (currently `approuting-istio`) and the contents of `spec.infrastructure.annotations` (Azure's `service.beta.kubernetes.io/azure-load-balancer-internal` swapped for AWS's load-balancer-controller equivalent). Both are already `values.yaml` fields (`gateway.className`, `gateway.internalAnnotations`), so the port needs a new values file, not a template edit. `apiVersion`, `kind`, `listeners`, `parentRefs`, `sectionName`, `hostnames`, `backendRefs` are unchanged — no provider detail leaked into the routing rules.
 
 ## 4. Infrastructure Definitions — Platform State
 

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: travel-agent-chroma-db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.chroma.storageClassName }}
+  storageClassName: {{ .Values.chroma.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.chroma.storageSize }}
