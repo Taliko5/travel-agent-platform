@@ -9,11 +9,48 @@ These change what gets written. Each is a documentation read, not a cloud operat
 
 ## 2. Application Changes
 
-- [ ] 2.1 In `backend/api/main.py`, read the CORS origin list from an environment variable, defaulting to `["http://localhost:3000"]` when unset (D6). No other behaviour changes.
-- [ ] 2.2 Add a case to `backend/tests/test_api_main.py` covering the configured-origin path alongside the existing default-origin coverage, and confirm the existing cases still pass unmodified.
-- [ ] 2.3 Add a build argument to `frontend/Dockerfile` supplying `NEXT_PUBLIC_API_URL` at image-build time, defaulting to today's value so a local `docker build` with no argument produces today's image (D1).
-- [ ] 2.4 Run `cd backend && pytest tests/ -v`, `ruff check backend/`, `ruff format --check backend/`, `cd frontend && npm test` and `npm run lint`. Record the actual output. These must pass before anything below is written.
-- [ ] 2.5 Run `docker-compose up --build` and confirm the local stack behaves exactly as it does today with no new environment set. Do not run `docker-compose down -v`.
+- [x] 2.1 In `backend/api/main.py`, `_cors_allowed_origins()` reads `CORS_ALLOWED_ORIGINS` (comma-separated), defaulting to `["http://localhost:3000"]` when unset, and `allow_origins=_cors_allowed_origins()` replaces the literal list. No other behaviour changes.
+- [x] 2.2 Added `TestCORS.test_configured_origin_is_used_when_env_var_set` to `backend/tests/test_api_main.py`. It calls the real `_cors_allowed_origins()` against a fresh throwaway `FastAPI`/`TestClient` rather than `api.main`'s already-built module-level `app` — reloading `api.main` to pick up a changed env var would re-run its OTel provider setup for no reason this test needs. The two existing CORS cases are unmodified and still pass.
+- [x] 2.3 `frontend/Dockerfile` gained `ARG NEXT_PUBLIC_API_URL=http://localhost:8000` and `ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL` before `RUN npm run build`, matching today's inlined-fallback value exactly, so a `docker build` with no `--build-arg` produces today's image.
+- [x] 2.4 Run and recorded:
+      ```
+      $ cd backend && pytest tests/ -v
+      ======================== 78 passed, 1 warning in 4.53s ========================
+      $ ruff check backend/
+      All checks passed!
+      $ ruff format --check backend/
+      26 files already formatted
+      $ cd frontend && npm test
+      Test Files  6 passed (6)
+           Tests  21 passed (21)
+      $ npm run lint
+      ✔ No ESLint warnings or errors
+      ```
+      All five pass. (The pytest run's trailing `--- Logging error ---`/`I/O operation on closed file` traceback is the console `BatchSpanProcessor`'s background export thread writing after interpreter shutdown, printed after "78 passed" — pre-existing and unrelated to this change, not a test failure.)
+- [x] 2.5 Ran `docker-compose up --build -d`. All four services reached `healthy`/`Up` with no config other than this repository's own files — no `CORS_ALLOWED_ORIGINS` or overriding `NEXT_PUBLIC_API_URL` set anywhere:
+      ```
+      $ docker-compose ps
+      backend      Up (healthy)   127.0.0.1:8000->8000/tcp
+      frontend     Up             127.0.0.1:3000->3000/tcp
+      grafana      Up (healthy)   127.0.0.1:3001->3000/tcp
+      prometheus   Up (healthy)   127.0.0.1:9090->9090/tcp
+
+      $ docker-compose exec -T backend env | grep -i cors
+      (CORS_ALLOWED_ORIGINS not set — default path is active)
+      $ curl -i -X OPTIONS localhost:8000/chat -H "Origin: http://localhost:3000" ...
+      HTTP/1.1 200 OK / access-control-allow-origin: http://localhost:3000
+      $ curl -i -X OPTIONS localhost:8000/chat -H "Origin: http://evil.example.com" ...
+      HTTP/1.1 400 Bad Request
+
+      $ docker-compose exec -T frontend env | grep -i NEXT_PUBLIC
+      NEXT_PUBLIC_API_URL=http://localhost:8000
+      $ docker-compose exec -T frontend sh -c "grep -rl localhost:8000 .next/static/chunks"
+      .next/static/chunks/app/page-c3c9f7e66ffa18da.js
+
+      $ curl -s -X POST localhost:8000/chat -d '{"message":"What is the weather in Tokyo?"}'
+      {"intent":"weather","response":"The current weather in Tokyo..."}   (real end-to-end response)
+      ```
+      CORS accepts `localhost:3000` and rejects an unconfigured origin, exactly as before 2.1; the frontend build argument added in 2.3 defaulted to `http://localhost:8000` and the bundle carries it, exactly as before 2.3. No behavior differs from today. `docker-compose down -v` was not run — the stack is still up, left for the user's own call on when to stop it.
 
 ## 3. Workload Definition — the Chart
 
