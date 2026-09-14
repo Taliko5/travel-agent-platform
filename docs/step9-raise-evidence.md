@@ -124,5 +124,20 @@ Each cycle's entry goes here as it happens, recording: which of tasks 8.1–8.8
 actually ran that cycle (per 7.5.3, later cycles start at 8.6), which of
 9.1–9.15 were attempted and their result, and which of 10.1–10.6 were run at
 that cycle's teardown (per 7.5.5, interim teardowns need only 10.1–10.2; the
-final teardown needs all six). No cycle has been executed yet as of this
-record.
+final teardown needs all six).
+
+### Cycle 1 — 2026-09-14
+
+**Pre-flight: active subscription/tenant confirmed.** Before any billable task
+ran, the owner confirmed the Cloud Shell session's active subscription and
+tenant match the repository's `AZURE_TENANT_ID`/`AZURE_SUBSCRIPTION_ID`
+Variables (task 6.7), closing design.md's open "which subscription" question
+for this session:
+
+Retrieved with `az account show --query '{tenantId:tenantId, subscriptionId:id,
+subscriptionName:name}' -o table` in Cloud Shell. The owner confirmed both
+values match what is already stored as the `AZURE_TENANT_ID` and
+`AZURE_SUBSCRIPTION_ID` repository Variables (task 6.7) — not restated here as
+raw values, per the Working Agreement's "never restate figures" rule; those
+Variables are the single source of truth. Not independently re-verified from
+this environment (no `gh` CLI/token, same limitation noted at task 6.7).
