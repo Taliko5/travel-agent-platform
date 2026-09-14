@@ -196,3 +196,28 @@ Variables — `AZURE_CLIENT_ID`, `ACR_LOGIN_SERVER`, `BACKEND_IDENTITY_CLIENT_ID
 `key_vault_name` respectively). Values not restated here — already captured
 once in the output block above. Not independently verified from this
 environment (no `gh` CLI/token, same limitation noted at task 6.7).
+
+**Task 8.3 — secret set out-of-band, run in Azure Cloud Shell.**
+
+Command:
+```
+cd Infrastructure/terraform/platform
+az keyvault secret set --vault-name "$(terraform output -raw key_vault_name)" --name "$(terraform output -raw key_vault_secret_object_name)" --value "<redacted>" --query "{name:name, enabled:attributes.enabled}" -o table
+```
+
+Result: `name: google-api-key, enabled: True`.
+
+The secret's value is never recorded here, by design — `design.md` D5 states
+the value is set out-of-band and never enters Terraform state or the
+repository, and task 4.6 confirmed no `azurerm_key_vault_secret` resource
+exists in `platform/` for exactly this reason. It was never typed into this
+chat or shown to Claude Code either.
+
+**Verification (this task's own requirement): the value appears in no
+repository file and no Terraform state file.** Run by the owner directly in
+Azure Cloud Shell, not by Claude Code:
+```
+grep -r "<the secret value>" ~/travel-agent-platform
+grep "<the secret value>" Infrastructure/terraform/platform/terraform.tfstate
+```
+Both returned zero matches.
