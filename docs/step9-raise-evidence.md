@@ -141,3 +141,58 @@ values match what is already stored as the `AZURE_TENANT_ID` and
 raw values, per the Working Agreement's "never restate figures" rule; those
 Variables are the single source of truth. Not independently re-verified from
 this environment (no `gh` CLI/token, same limitation noted at task 6.7).
+
+**Task 8.1 — platform state applied, run in Azure Cloud Shell.**
+
+Command:
+```
+cd Infrastructure/terraform/platform
+terraform init
+terraform apply -var="operator_object_id=$(az ad signed-in-user show --query id -o tsv)"
+```
+
+Output, as pasted back by the owner (the `terraform init` transcript was not
+separately captured and is not recorded here):
+
+```
+Warning: Argument is deprecated
+
+  with azurerm_key_vault.this,
+  on keyvault.tf line 18, in resource "azurerm_key_vault" "this":
+  18:   enable_rbac_authorization = true
+
+This property has been renamed to `rbac_authorization_enabled` and will be
+removed in v5.0 of the provider
+
+Apply complete! Resources: 10 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+acr_id = "/subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourceGroups/travel-agent-platform/providers/Microsoft.ContainerRegistry/registries/travelagentacr52f2y82s"
+acr_login_server = "travelagentacr52f2y82s.azurecr.io"
+backend_federated_credential_configured = false
+backend_identity_client_id = "f2739b2d-73ba-48c1-a843-8cbfea73cf5f"
+backend_identity_principal_id = "d34674d1-c3c0-4a18-a6ec-8aa749fb39af"
+ci_identity_client_id = "c6f7b5b4-846f-4218-a3c7-b48bcc037993"
+ci_identity_principal_id = "2785c1f0-588c-438c-9818-63422fd5307d"
+key_vault_id = "/subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourceGroups/travel-agent-platform/providers/Microsoft.KeyVault/vaults/travel-agent-kv-52f2y82s"
+key_vault_name = "travel-agent-kv-52f2y82s"
+key_vault_secret_object_name = "google-api-key"
+key_vault_tenant_id = "18ff101d-9da4-499d-acc0-e9dbef4f4d8f"
+region = "germanywestcentral"
+resource_group_name = "travel-agent-platform"
+```
+
+`backend_federated_credential_configured = false` is expected at this stage —
+`aks_oidc_issuer_url` is still empty on this first apply, so
+`azurerm_federated_identity_credential.backend_serviceaccount` was correctly
+skipped (`count = 0`). Task 8.6.1 is what flips this to `true`, after the
+cluster state exists.
+
+**Task 8.2 — repository Variables set.** The remaining four CI repository
+Variables — `AZURE_CLIENT_ID`, `ACR_LOGIN_SERVER`, `BACKEND_IDENTITY_CLIENT_ID`,
+`KEY_VAULT_NAME` — were set from the corresponding outputs above
+(`ci_identity_client_id`, `acr_login_server`, `backend_identity_client_id`,
+`key_vault_name` respectively). Values not restated here — already captured
+once in the output block above. Not independently verified from this
+environment (no `gh` CLI/token, same limitation noted at task 6.7).
