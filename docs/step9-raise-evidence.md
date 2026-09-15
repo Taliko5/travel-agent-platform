@@ -249,3 +249,43 @@ entry after 8.6, then pinned explicitly into `cluster/variables.tf`'s default
 for subsequent applies in this raise/teardown sequence (task 7.5.2). Task 8.4
 is not yet complete — the "record which version the cluster is created at"
 half is still open.
+
+**Task 8.5 — 2-vCPU node pool probe and SKU correction, run in Azure Cloud
+Shell.**
+
+Two `az aks create` probes were run in a throwaway resource group,
+`aks-vcpu-probe-rg`, deleted immediately after each test. The exact `az aks
+create` invocations were not pasted into this chat and are not reproduced
+verbatim here — the results below are as reported by the owner:
+
+- `Standard_D2as_v5`: rejected — `BadRequest`, *"not allowed in your
+  subscription in location germanywestcentral."* A subscription-level
+  restriction on the entire Dasv5 (AMD, v5) family in this region, not the
+  2-vCPU system-pool policy `design.md` D14 quotes. `Standard_D4as_v5` —
+  this design's originally-chosen SKU, same family — would have failed
+  task 8.6's apply for the same reason.
+- `Standard_D2s_v7` (2 vCPU, confirmed in the allowed list): succeeded —
+  the System-mode node pool provisioned, `provisioningState: Succeeded`.
+
+**SKU correction.** `Standard_D4as_v5` replaced by `Standard_D4s_v7` (Intel,
+v7 generation, same 4 vCPU / 16 GiB floor) as `cluster/variables.tf`'s
+`node_vm_size` default, for the subscription-availability reason above.
+Price query, run twice independently: first by the owner via `curl` in Azure
+Cloud Shell against the public Azure Retail Prices API; then re-confirmed by
+Claude Code via WebFetch against the same API, before the figure went into
+`design.md`. Both runs returned the same result:
+
+```
+GET https://prices.azure.com/api/retail/prices?$filter=armRegionName eq 'germanywestcentral' and armSkuName eq 'Standard_D4s_v7' and priceType eq 'Consumption'
+```
+
+Result: `Standard_D4s_v7`, Linux, Consumption → **$0.305/hour** (Windows and
+Spot meters also returned by the same query, not used).
+
+**Go-ahead:** the owner reviewed the SKU-availability finding and the
+corrected cost floor above and approved proceeding, conditional on the same
+Section 10 teardown discipline already governing this raise/teardown
+sequence (task 7.5.1) — the same condition task 7.3's original go-ahead was
+made on.
+
+**Date:** 2026-09-15

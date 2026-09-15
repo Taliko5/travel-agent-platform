@@ -40,9 +40,9 @@ variable "node_count" {
 }
 
 variable "node_vm_size" {
-  description = "System node pool VM size — the documented AKS minimum system-pool SKU, 4 vCPU / 16 GiB (design.md D14). A variable for the same reason as node_count."
+  description = "System node pool VM size — the documented AKS minimum system-pool SKU, 4 vCPU / 16 GiB (design.md D14). Standard_D4as_v5 is not an allowed VM size in this subscription/region — confirmed by a direct az aks create attempt (BadRequest); Standard_D4s_v7 (Intel, v7 generation, same 4 vCPU / 16 GiB floor) is confirmed available (design.md D14's 2026-09-15 addendum). A variable for the same reason as node_count."
   type        = string
-  default     = "Standard_D4as_v5"
+  default     = "Standard_D4s_v7"
 }
 
 variable "acr_id" {

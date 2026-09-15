@@ -51,14 +51,14 @@ Nothing here is applied. This is the list `docs/plan.md` requires to be approved
 |---|---|---|---|
 | 1 | Resource group (cluster) | Container for 2–7; makes teardown one operation | $0 |
 | 2 | AKS managed cluster, **Free** tier | The cluster. D3 | $0 cluster management |
-| 3 | System node pool: 2 × `Standard_D4as_v5` | Runs everything: app pods, ingress control plane and proxies, CSI driver, metrics add-on. Sized in D14 | $0.208/hour each → **$0.416/hour** |
+| 3 | System node pool: 2 × `Standard_D4as_v5` | Runs everything: app pods, ingress control plane and proxies, CSI driver, metrics add-on. Sized in D14 | $0.208/hour each → **$0.416/hour** (superseded 2026-09-15 — see D14's addendum) |
 | 4 | 2 × node OS disk, Premium SSD | One per node | P6: $11.227/month each; P10: $21.68/month each |
 | 5 | Node resource group (`MC_…`) | Created by AKS, not by us; holds 3, 4, 6, 7 and the CSI add-on's identity | $0 for the group itself |
 | 6 | Standard Load Balancer (AKS-managed) | Cluster egress, and the ingress Gateway's frontend | $0.025/hour for the first 5 rules; $0.01/hour per rule beyond; $0.005/GB processed |
 | 7 | 1 × Standard static public IPv4 | Cluster outbound. **Not** an inbound endpoint — D2 | $0.005/hour |
 | 8 | Azure Monitor workspace | Managed Prometheus ingestion target. D7, D8 | No standing meter appears in the retail price list; ingestion $0.16 per 10M samples, query $0.001 per 10M samples |
 
-**Cost floor while the cluster is up:** 3 + 4 + 6 + 7 = $0.416 + $0.031 + $0.025 + $0.005 ≈ **$0.48/hour** ≈ $3.81 for an eight-hour session, before metrics ingestion (D8, small) and egress. **[reasoned]** — arithmetic over the read prices, with the OS-disk monthly figure divided by 730.
+**Cost floor while the cluster is up:** 3 + 4 + 6 + 7 = $0.416 + $0.031 + $0.025 + $0.005 ≈ **$0.48/hour** (superseded 2026-09-15 — see D14's addendum) ≈ $3.81 for an eight-hour session, before metrics ingestion (D8, small) and egress. **[reasoned]** — arithmetic over the read prices, with the OS-disk monthly figure divided by 730.
 
 Egress: the retail list shows `Standard Data Transfer Out` at $0.0/GB up to a 100 GB tier minimum, then $0.08–$0.087/GB. An ephemeral demo cluster does not approach 100 GB.
 
@@ -447,6 +447,17 @@ The cost table previously named `Standard_D2as_v5` with no sizing behind it, and
 **A contradiction inside Microsoft's own documentation, recorded rather than resolved.** The Terraform samples on [cluster-container-registry-integration](https://learn.microsoft.com/en-us/azure/aks/cluster-container-registry-integration) and [csi-secrets-store-driver](https://learn.microsoft.com/en-us/azure/aks/csi-secrets-store-driver) both build `default_node_pool` on `Standard_DS2_v2`, a 2-vCPU size, which the system-pool requirement above forbids. This design follows the explicit requirement rather than the samples, because a stated requirement is the thing an apply will be judged against. If a 2-vCPU system pool turns out to be accepted in practice, the node line halves and the hourly floor returns to roughly its previous value — worth checking on the first raise, and not assumed here.
 
 **Cost consequence, stated plainly:** this decision roughly doubles the node line and raises the hourly floor from about $0.27 to about $0.48. That is a correction, not an increase — the earlier figure priced a SKU that does not satisfy AKS's own requirement.
+
+**Addendum, 2026-09-15 (task 8.5, Cycle 1): `Standard_D4as_v5` is not available in this subscription; switched to `Standard_D4s_v7`.**
+
+Two probes were run in Azure Cloud Shell, in a throwaway resource group (`aks-vcpu-probe-rg`, deleted immediately after each test):
+
+- `Standard_D2as_v5` (2 vCPU, the same Dasv5 family as this section's original choice, `Standard_D4as_v5`) was rejected outright: `BadRequest`, *"not allowed in your subscription in location germanywestcentral."* The rejection is a subscription-level allow-list restriction on the entire Dasv5 (AMD, v5) family in this region, not the 2-vCPU system-pool policy quoted above. This means `Standard_D4as_v5` — the SKU this section names — would have failed task 8.6's apply for the same reason, independent of the vCPU question this section otherwise settles.
+- A second probe with `Standard_D2s_v7` (2 vCPU, confirmed in the allowed list) succeeded: the System-mode node pool provisioned, `provisioningState: Succeeded`. This contradicts the documented *"System node pools require a VM SKU of at least 4 vCPUs"* requirement quoted above — in practice, on this subscription, it is not enforced.
+
+**The node-size decision is not changed by the second finding alone.** This section's sizing reasoning rests on workload capacity — `istiod`, the CSI driver, the monitoring add-ons, the backend pods — not only on documented policy compliance, and the per-pod requirements that would actually settle it are still unmeasured; that measurement is task 9.1's job, on the real raised cluster. Revisit node size only after 9.1 provides real numbers, not from this probe alone.
+
+**SKU correction: `Standard_D4as_v5` → `Standard_D4s_v7`** (Intel, v7 generation, same 4 vCPU / 16 GiB floor), for the subscription-availability reason above, not a change in sizing reasoning. Confirmed hourly price in `germanywestcentral`, Linux, Consumption, via the public [Azure Retail Prices API](https://prices.azure.com/api/retail/prices): **`Standard_D4s_v7` = $0.305/hour**, against `Standard_D4as_v5`'s previously-cited $0.208/hour. Recomputed: 2 nodes × $0.305 = **$0.61/hour** (was $0.416/hour), raising the cost floor from ≈$0.48/hour to **≈$0.674/hour** ($0.61 node + $0.031 disk + $0.025 load balancer + $0.005 IP). This is a correction driven by SKU-family unavailability in this subscription, not a scope change — the same distinction this section's original "Cost consequence" paragraph already draws.
 
 ### D15 — No TLS certificate on the Gateway; the listener is plain HTTP on an internal address (portable)
 `proposal.md` currently lists TLS certificates as out of scope in the same breath as a public URL and a DNS zone. That grouping does not hold up: an internal `Gateway` can terminate TLS perfectly well without either, using a self-signed or internally-issued certificate, so "there is no public hostname" is not by itself a reason to skip it. Reopened here and decided on its own terms.
