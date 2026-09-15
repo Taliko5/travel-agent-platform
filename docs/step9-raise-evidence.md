@@ -221,3 +221,31 @@ grep -r "<the secret value>" ~/travel-agent-platform
 grep "<the secret value>" Infrastructure/terraform/platform/terraform.tfstate
 ```
 Both returned zero matches.
+
+**Task 8.4 — supported Kubernetes versions queried (partial), run in Azure
+Cloud Shell.**
+
+Command:
+```
+az aks get-versions --location germanywestcentral --output table
+```
+
+Result: versions **1.34.0 through 1.36.3** are listed under SupportPlan
+`KubernetesOfficial, AKSLongTermSupport` — standard support, no extra cost.
+Versions **1.33.13 and below** show only `AKSLongTermSupport` — out of
+standard support; using one of those would mean opting into AKS's paid Long
+Term Support plan.
+
+This settles `design.md` D2's regional-propagation concern: the region
+already offers up through 1.36.3, matching the global supported-version
+table with no lag observed. It also surfaces a cost consideration D2 didn't
+originally anticipate — the standard/LTS support-plan split — noted here for
+a task 8.7/D2 follow-up if relevant; not acted on in this entry.
+
+`kubernetes_version` remains `null` for task 8.6's upcoming apply, per this
+variable's own documented plan (`cluster/variables.tf`). Which version the
+provider actually selects on that apply will be recorded here as a follow-up
+entry after 8.6, then pinned explicitly into `cluster/variables.tf`'s default
+for subsequent applies in this raise/teardown sequence (task 7.5.2). Task 8.4
+is not yet complete — the "record which version the cluster is created at"
+half is still open.

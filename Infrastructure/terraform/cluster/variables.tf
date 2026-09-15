@@ -24,10 +24,10 @@ variable "cluster_name" {
 variable "kubernetes_version" {
   description = <<-EOT
     Kubernetes minor.patch version. Left null so the provider's own default
-    applies on first apply — task 8.3 queries which versions this region
+    applies on first apply — task 8.4 queries which versions this region
     actually offers and records the version the cluster is created at
     (design.md's "not verified" note on regional version availability).
-    Set explicitly on subsequent applies once 8.3 has run.
+    Set explicitly on subsequent applies once 8.4 has run.
   EOT
   type        = string
   default     = null
