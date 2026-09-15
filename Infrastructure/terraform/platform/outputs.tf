@@ -1,10 +1,4 @@
-# Every value here is an identifier or a URL — resource IDs, names,
-# client IDs, a tenant ID, a login server hostname. None is the vault
-# secret's value: this state never reads it, so it cannot output it
-# (task 4.6). Infrastructure/terraform/cluster/ (Section 5) reads these
-# to attach the registry, enable the Key Vault add-on, and — once its own
-# OIDC issuer exists — feed var.aks_oidc_issuer_url back into a second
-# apply of this state.
+# Every value here is an identifier or a URL, never the vault secret's value — design.md D5.
 
 output "resource_group_name" {
   value = azurerm_resource_group.platform.name

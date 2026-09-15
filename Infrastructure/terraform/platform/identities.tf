@@ -1,8 +1,4 @@
-# CI: GitHub Actions -> ACR (design.md D4, item 12). The AKS-scoped role
-# this same identity needs for `az aks get-credentials` (tasks.md 6.4)
-# references a cluster this state doesn't have — that role assignment
-# belongs in Infrastructure/terraform/cluster/ (Section 5), against this
-# identity's principal_id output below.
+# CI: GitHub Actions -> ACR (design.md D4, item 12).
 resource "azurerm_user_assigned_identity" "ci" {
   name                = "travel-agent-ci"
   resource_group_name = azurerm_resource_group.platform.name
@@ -44,10 +40,7 @@ resource "azurerm_role_assignment" "backend_keyvault_secrets_user" {
   principal_id         = azurerm_user_assigned_identity.backend.principal_id
 }
 
-# Deferred until var.aks_oidc_issuer_url is supplied on a second apply —
-# the issuer is an output of Infrastructure/terraform/cluster/, which does
-# not exist on this state's first apply (D10's platform-before-cluster
-# sequencing). See README.md for the two-apply sequence.
+# Deferred until var.aks_oidc_issuer_url is supplied on a second apply — design.md D5.
 resource "azurerm_federated_identity_credential" "backend_serviceaccount" {
   count                     = var.aks_oidc_issuer_url == "" ? 0 : 1
   name                      = "travel-agent-backend-sa"

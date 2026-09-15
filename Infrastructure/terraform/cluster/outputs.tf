@@ -1,6 +1,4 @@
-# Every value here is an identifier or a URL, matching platform/outputs.tf's
-# convention. oidc_issuer_url feeds the platform state's second apply
-# (Infrastructure/terraform/platform/README.md's three-step sequence).
+# oidc_issuer_url feeds the platform state's second apply — design.md D5.
 
 output "cluster_name" {
   value = azurerm_kubernetes_cluster.this.name

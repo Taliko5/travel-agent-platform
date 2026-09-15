@@ -11,10 +11,7 @@ terraform {
     }
   }
 
-  # No remote backend configured — this design doesn't create a storage
-  # account to hold it, and adding one would be a resource this pass never
-  # decided. State is local; the repository's top-level .gitignore keeps
-  # *.tfstate*, .terraform/ and *.tfvars out of the repository.
+  # No remote backend; state is local — design.md D10.
 }
 
 provider "azurerm" {
