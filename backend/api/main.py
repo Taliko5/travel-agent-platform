@@ -78,10 +78,17 @@ async def lifespan(_: FastAPI):
     yield
 
 
+def _cors_allowed_origins() -> list[str]:
+    origins = os.environ.get("CORS_ALLOWED_ORIGINS")
+    if not origins:
+        return ["http://localhost:3000"]
+    return [origin.strip() for origin in origins.split(",") if origin.strip()]
+
+
 app = FastAPI(title="travel agent API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_cors_allowed_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )

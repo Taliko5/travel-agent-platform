@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: travel-agent-backend
+  labels:
+    app: travel-agent-backend
+spec:
+  replicas: {{ .Values.replicaCount.backend }}
+  selector:
+    matchLabels:
+      app: travel-agent-backend
+  template:
+    metadata:
+      labels:
+        app: travel-agent-backend
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: backend
+          image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
+          imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+          ports:
+            - containerPort: 8000
+          env:
+            - name: CORS_ALLOWED_ORIGINS
+              value: {{ .Values.backend.corsAllowedOrigins | quote }}
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keyVault.k8sSecretName }}
+                  key: {{ .Values.keyVault.secretKey }}
+          resources:
+            {{- toYaml .Values.resources.backend | nindent 12 }}
+          volumeMounts:
+            # Unread by the container; mounting it is what makes the CSI
+            # driver sync GOOGLE_API_KEY into the Kubernetes Secret the
+            # secretKeyRef above reads (design.md D5, task 1.1).
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
+            - name: chroma-data
+              mountPath: /app/rag/chroma_db
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: travel-agent-secrets-spc
+        - name: chroma-data
+          persistentVolumeClaim:
+            claimName: travel-agent-chroma-db

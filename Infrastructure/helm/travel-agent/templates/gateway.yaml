@@ -1,0 +1,28 @@
+# gatewayClassName and infrastructure.annotations are the one place a
+# provider detail is allowed to appear (design.md D2) — everything else on
+# this Gateway and its HTTPRoutes is upstream Gateway API and crosses to
+# EKS unchanged (task 3.13).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: travel-agent-gateway
+spec:
+  gatewayClassName: {{ .Values.gateway.className }}
+  infrastructure:
+    annotations:
+      {{- toYaml .Values.gateway.internalAnnotations | nindent 6 }}
+  listeners:
+    - name: frontend
+      hostname: {{ .Values.gateway.frontendHost | quote }}
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: backend
+      hostname: {{ .Values.gateway.backendHost | quote }}
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same

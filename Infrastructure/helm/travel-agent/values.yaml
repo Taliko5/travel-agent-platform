@@ -1,0 +1,80 @@
+# Defaults are the coordinates CI overrides on every deploy (image tag,
+# registry, cluster-specific hosts/identities) plus the values that make a
+# `helm template` render something sane with no overrides at all — never
+# real per-cluster identifiers. See values-example.yaml for a filled-in set
+# matching what the CI `push` job (D4, D13) actually supplies.
+
+image:
+  backend:
+    repository: travel-agent-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  frontend:
+    repository: travel-agent-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+replicaCount:
+  backend: 1
+  frontend: 1
+
+resources:
+  backend:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  frontend:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+backend:
+  # Comma-separated, matches _cors_allowed_origins() in backend/api/main.py (D6).
+  corsAllowedOrigins: "http://localhost:3000"
+
+# The frontend's API URL is a build-time value (D1) — frontend.apiUrl isn't
+# read by any template here, it exists so CI's image-build step and this
+# chart's deploy step read the same value from one place instead of two.
+frontend:
+  apiUrl: "http://localhost:8000"
+
+# ServiceAccount federated to the backend's Azure identity (D5). clientId
+# and the vault coordinates below are Terraform outputs from
+# Infrastructure/terraform/platform/ — empty here on purpose; a `helm
+# template` with no overrides renders a ServiceAccount with no client ID
+# rather than a placeholder that looks like a real one.
+serviceAccount:
+  name: travel-agent-backend
+  workloadIdentityClientId: ""
+
+keyVault:
+  name: ""
+  tenantId: ""
+  # Object name in the vault and the key inside the synced Kubernetes
+  # Secret both stay "google-api-key" — the same name docs/step5.md's
+  # manual secret used, unchanged by D5.
+  secretObjectName: "google-api-key"
+  secretKey: "google-api-key"
+  k8sSecretName: "travel-agent-secrets"
+
+# gatewayClassName and the load-balancer annotations are the one place a
+# provider detail is allowed to appear (D2) — everything else in
+# gateway.yaml/httproute.yaml is upstream Gateway API and carries to EKS
+# unchanged (task 3.13).
+gateway:
+  className: "approuting-istio"
+  internalAnnotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+  frontendHost: "travel-agent.internal"
+  backendHost: "api.travel-agent.internal"
+
+# No storageClassName pins this to the cluster's default (AKS: managed-csi).
+chroma:
+  storageClassName: ""
+  storageSize: 1Gi

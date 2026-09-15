@@ -1,6 +1,6 @@
 ## Context
 
-`step8-observability-scaffold` left four metric instruments declared with no recording call sites, no label sets and provisional bucket boundaries, on the stated grounds that low-cardinality label design was itself the learning objective. This change is that work. Two of the four instruments are now recorded; two are still declared and unrecorded.
+`step8-observability-scaffold` left four metric instruments declared with no recording call sites, no label sets and provisional bucket boundaries, on the stated grounds that low-cardinality label design was itself the learning objective. This change is that work. All four instruments are now recorded.
 
 The authoritative detail lives in two places and is deliberately not repeated here. Each panel's expression, the reasoning behind it and the measurement figures it quotes live in that panel's own `description` field in `observability/grafana/dashboards/travel-agent-overview.json`, which is where a reader meets them; `observability/grafana/dashboards/README.md` covers what makes a dashboard file provisionable. This change's `tasks.md` owns the per-item history — the seeding defect's root cause, the bucket measurements, and the decisions taken along the way. A second copy of those numbers is what produced the 2026-08-11 / 2026-08-12 discrepancy already recorded there.
 

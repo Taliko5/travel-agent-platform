@@ -98,3 +98,39 @@ class TestCORS:
             response.headers.get("access-control-allow-origin")
             != "http://evil.example.com"
         )
+
+    def test_configured_origin_is_used_when_env_var_set(self, monkeypatch):
+        # Exercises the real _cors_allowed_origins() parsing against a fresh
+        # app/TestClient rather than api.main's module-level app: that app is
+        # already built (and shared by every test in this file via the
+        # `client` fixture), and re-importing api.main to pick up a changed
+        # env var would re-run its OTel provider setup — a reload this test
+        # doesn't need and shouldn't risk.
+        from fastapi import FastAPI
+        from fastapi.middleware.cors import CORSMiddleware
+        from fastapi.testclient import TestClient
+        from api.main import _cors_allowed_origins
+
+        monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "https://example-frontend.test")
+
+        configured_app = FastAPI()
+        configured_app.add_middleware(
+            CORSMiddleware,
+            allow_origins=_cors_allowed_origins(),
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+        @configured_app.get("/ping")
+        def ping():
+            return {"ok": True}
+
+        configured_client = TestClient(configured_app)
+        response = configured_client.get(
+            "/ping", headers={"Origin": "https://example-frontend.test"}
+        )
+
+        assert (
+            response.headers.get("access-control-allow-origin")
+            == "https://example-frontend.test"
+        )

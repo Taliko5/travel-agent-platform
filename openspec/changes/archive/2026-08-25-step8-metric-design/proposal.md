@@ -11,10 +11,10 @@ Section 9 of `step8-observability-scaffold` was headed "reference only — not i
 - Hoist `VALID_INTENTS` into a module constant in `backend/agent/nodes.py` so the classifier and the seeding loop share one definition.
 - Provision `observability/grafana/dashboards/travel-agent-overview.json` — seven panels, `uid: travel-agent-overview` — through Grafana's file provider.
 - Add `scripts/generate_load.py`, rate-limited by default to what the Gemini free tier tolerates.
-- Re-tune `chat_request_duration_seconds`'s bucket boundaries from measured data. Agreed, not yet applied.
-- Wire recording call sites for `llm_call_duration_seconds` and `rag_retrieval_total`. Not started.
-- Decide span names and attributes for the events `OTelCallbackHandler` receives. Not started.
-- Verify the pipeline end-to-end and record the result in `docs/step8.md`. In progress.
+- Re-tune `chat_request_duration_seconds`'s bucket boundaries from measured data. Applied.
+- Wire recording call sites for `llm_call_duration_seconds` and `rag_retrieval_total`. Done.
+- Decide span names and attributes for the events `OTelCallbackHandler` receives. Done.
+- Verify the pipeline end-to-end and record the result in `docs/step8.md`. Done for the 2026-08-19 run, checked 2026-08-21. That check predates the D14–D19 work of 2026-08-22, so it does not reach `llm_call_duration_seconds`, `rag_retrieval_total`, or the panels added alongside them; re-verification of those is outstanding.
 - **BREAKING**: none — additive instrumentation and configuration only.
 
 ## Capabilities
