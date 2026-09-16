@@ -23,14 +23,14 @@ variable "cluster_name" {
 
 variable "kubernetes_version" {
   description = <<-EOT
-    Kubernetes minor.patch version. Left null so the provider's own default
-    applies on first apply — task 8.4 queries which versions this region
-    actually offers and records the version the cluster is created at
-    (design.md's "not verified" note on regional version availability).
-    Set explicitly on subsequent applies once 8.4 has run.
+    Kubernetes minor.patch version. Pinned to "1.35" per task 7.5.2, once
+    task 8.4 queried which versions this region actually offers and
+    recorded the version the cluster was created at (2026-09-16; see
+    docs/step9-raise-evidence.md). The provider resolved this to the
+    patch version "1.35.7" on that apply.
   EOT
   type        = string
-  default     = null
+  default     = "1.35"
 }
 
 variable "node_count" {

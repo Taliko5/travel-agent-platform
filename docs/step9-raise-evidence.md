@@ -402,3 +402,30 @@ so the disk cost line in the cost table applies rather than being removed;
 re-confirmed against the actual disk (e.g. via `az disk list`), consistent
 with this design's existing "not verified, here's what would settle it
 further" convention rather than stated as a confirmed fact.
+
+## Tasks 10.1 / 10.2 — Interim teardown (2026-09-16)
+
+Per task 7.5.5, only the minimum bar (10.1 + 10.2) was run this session;
+10.3-10.6 and Section 9 are deferred to a future session, after the Part 2
+code-review fixes and the next raise cycle.
+
+**Task 10.1 — destroy.**
+
+Command: `terraform destroy`
+
+Started 20:11, finished 20:19 (2026-09-16). Output:
+
+```
+Destroy complete! Resources: 11 destroyed.
+```
+
+**Task 10.2 — no billable resource remains.**
+
+Command: `az group exists --name travel-agent-cluster` → result: `false`
+
+Command: `az group list --query "[?starts_with(name, 'MC_travel-agent-cluster')].name" -o tsv` → result: empty (no orphaned node resource group)
+
+Command: `az resource list --query "[?resourceGroup=='travel-agent-cluster'].{name:name, type:type}" -o table` → result: empty
+
+No cluster, no node pool, no load balancer, no public IP, and no orphaned
+`MC_*` node resource group remain from this session.
