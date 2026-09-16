@@ -28,6 +28,9 @@ resource "azurerm_kubernetes_cluster" "this" {
 
   azure_active_directory_role_based_access_control {
     azure_rbac_enabled = true
+    # Required once azure_rbac_enabled is set (provider schema), though the
+    # value itself just matches tenant_id's documented default.
+    tenant_id = data.azurerm_client_config.current.tenant_id
   }
 
   # Syncs GOOGLE_API_KEY from the platform state's Key Vault — design.md D5.
@@ -37,9 +40,11 @@ resource "azurerm_kubernetes_cluster" "this" {
   }
 
   # Requires an existing workspace once both fields are set — design.md D8.
+  # "" is rejected by the provider schema; "app" is a test candidate for
+  # the minimal non-empty value, not yet confirmed as final.
   monitor_metrics {
-    annotations_allowed = ""
-    labels_allowed      = ""
+    annotations_allowed = "app"
+    labels_allowed      = "app"
   }
 
   # Base enablement; NGINX explicitly off — design.md D2.
