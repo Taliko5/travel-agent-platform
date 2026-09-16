@@ -6,6 +6,8 @@ metadata:
     app: travel-agent-backend
 spec:
   replicas: {{ .Values.replicaCount.backend }}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: travel-agent-backend
@@ -16,6 +18,24 @@ spec:
         azure.workload.identity/use: "true"
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+      initContainers:
+        - name: rag-ingest
+          image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
+          imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+          command: ["python", "rag/ingest.py"]
+          env:
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keyVault.k8sSecretName }}
+                  key: {{ .Values.keyVault.secretKey }}
+          volumeMounts:
+            # Unread by the container; mounting it triggers the CSI secret sync secretKeyRef reads (design.md D5).
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
+            - name: chroma-data
+              mountPath: /app/rag/chroma_db
       containers:
         - name: backend
           image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
@@ -33,9 +53,7 @@ spec:
           resources:
             {{- toYaml .Values.resources.backend | nindent 12 }}
           volumeMounts:
-            # Unread by the container; mounting it is what makes the CSI
-            # driver sync GOOGLE_API_KEY into the Kubernetes Secret the
-            # secretKeyRef above reads (design.md D5, task 1.1).
+            # Unread by the container; mounting it triggers the CSI secret sync secretKeyRef reads (design.md D5).
             - name: secrets-store-inline
               mountPath: "/mnt/secrets-store"
               readOnly: true

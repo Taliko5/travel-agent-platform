@@ -327,7 +327,9 @@ jobs:
 
       - name: Read gateway hostname from values.yaml
         id: gateway-host
-        run: echo "backend_host=$(yq '.gateway.backendHost' Infrastructure/helm/travel-agent/values.yaml)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "backend_host=$(yq '.gateway.backendHost' Infrastructure/helm/travel-agent/values.yaml)" >> "$GITHUB_OUTPUT"
+          echo "frontend_host=$(yq '.gateway.frontendHost' Infrastructure/helm/travel-agent/values.yaml)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -360,8 +362,18 @@ jobs:
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
 
+      - name: Set up kubelogin
+        uses: azure/use-kubelogin@v3
+        with:
+          kubelogin-version: 'latest'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Get AKS credentials
         run: az aks get-credentials --resource-group "${{ vars.AKS_RESOURCE_GROUP_NAME }}" --name "${{ vars.AKS_CLUSTER_NAME }}" --overwrite-existing
+
+      - name: Convert kubeconfig to use kubelogin
+        run: kubelogin convert-kubeconfig -l azurecli
 
       - name: Deploy with Helm
         run: |
@@ -371,6 +383,7 @@ jobs:
             --set image.frontend.repository="${{ vars.ACR_LOGIN_SERVER }}/travel-agent-frontend" \
             --set image.frontend.tag="${{ github.sha }}" \
             --set frontend.apiUrl="http://${{ steps.gateway-host.outputs.backend_host }}" \
+            --set backend.corsAllowedOrigins="http://${{ steps.gateway-host.outputs.frontend_host }}" \
             --set serviceAccount.workloadIdentityClientId="${{ vars.BACKEND_IDENTITY_CLIENT_ID }}" \
             --set keyVault.name="${{ vars.KEY_VAULT_NAME }}" \
             --set keyVault.tenantId="${{ vars.AZURE_TENANT_ID }}"
