@@ -20,13 +20,18 @@ registry ID, the vault name) to attach to. The order is:
 2. Apply `Infrastructure/terraform/cluster/`, feeding it this state's
    `acr_id`, `key_vault_id`, `key_vault_name` and `key_vault_tenant_id`
    outputs.
-3. Apply here again with `-var="aks_oidc_issuer_url=$(terraform -chdir=../cluster output -raw oidc_issuer_url)"`.
+3. Apply here again with the same `-var="operator_object_id=..."` used in
+   step 1 (if one was passed) plus
+   `-var="aks_oidc_issuer_url=$(terraform -chdir=../cluster output -raw oidc_issuer_url)"`.
    The federated identity credential is created on this second apply, and
    `backend_federated_credential_configured` reads `true`.
 
-Nothing is destroyed or recreated by the second apply — every other
-resource in this state is untouched, since only the one conditional
-resource depends on the new variable.
+Nothing is destroyed or recreated by the second apply, provided every
+variable passed in step 1 is passed again here — `operator_object_id`
+included. Dropping it flips `azurerm_role_assignment.operator_secrets_officer`
+(`keyvault.tf`) from `count = 1` to `count = 0` and destroys that role
+assignment; only the one conditional resource tied to the new variable is
+otherwise affected.
 
 ## What this state deliberately doesn't do
 
