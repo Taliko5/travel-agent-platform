@@ -56,7 +56,8 @@ set_meter_provider(meter_provider)
 from observability import metrics  # noqa: E402
 
 # Seeding must happen via an explicit post-provider call, not import
-# position — see tasks.md Section 9 ("Fix counter seeding").
+# position — see step8-observability-scaffold's tasks.md Section 9
+# ("Fix counter seeding").
 metrics.seed_counters()
 
 configure_logging()
@@ -65,12 +66,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Runs after uvicorn's own Server has finished its logging setup (ASGI
-    # lifespan startup fires once the server is otherwise ready), so this
-    # reconfiguration can't be clobbered by uvicorn configuring these loggers
-    # later — unlike a module-import-time call, whose ordering relative to
-    # uvicorn's own setup isn't guaranteed. See uvicorn-structured-logging
-    # design.md D2.
+    # Runs after uvicorn's own logging setup, so it can't be clobbered by it
+    # running later — uvicorn-structured-logging design.md D2.
     for logger_name in ("uvicorn.access", "uvicorn.error"):
         uvicorn_logger = logging.getLogger(logger_name)
         uvicorn_logger.handlers = [build_json_handler()]
