@@ -289,3 +289,116 @@ sequence (task 7.5.1) — the same condition task 7.3's original go-ahead was
 made on.
 
 **Date:** 2026-09-15
+
+**Tasks 8.4, 8.6, 8.7 — cluster state raised, Kubernetes version and node OS
+disk recorded. Run in Azure Cloud Shell, 2026-09-16.**
+
+**Task 8.4 — Kubernetes version.** `kubernetes_version` left `null` for this
+first apply, per `cluster/variables.tf`'s own documented plan. The
+provider's default resolved to:
+
+```
+kubernetes_version = "1.35"
+current_kubernetes_version = "1.35.7"
+```
+
+(from `terraform state show azurerm_kubernetes_cluster.this`.)
+
+**Task 8.6 — cluster state apply, three attempts.**
+
+*Attempt 1* failed on two independent errors:
+
+```
+Error: ... unexpected status 400 (400 Bad Request) ...
+"code": "ErrCode_InsufficientVCPUQuota"
+```
+
+```
+Error: ... unexpected status 409 (409 Conflict) ...
+"MissingSubscriptionRegistration: The subscription is not registered to
+use namespace 'Microsoft.Monitor'."
+```
+
+State after attempt 1: only `azurerm_resource_group.cluster` and
+`azurerm_monitor_data_collection_endpoint.prometheus` existed — both
+free/non-billable, nothing else created.
+
+The node SKU was then corrected `Standard_D4s_v7` → `Standard_D2s_v7` to
+fit this subscription's 4-vCPU regional quota ceiling — full reasoning and
+the price recomputation already recorded in `design.md` D14's 2026-09-16
+addendum, not repeated here.
+
+*Attempt 2*, after the SKU fix but before `Microsoft.Monitor` was
+registered: `azurerm_kubernetes_cluster.this` and
+`azapi_update_resource.app_routing_gateway_api` were created successfully
+(the `azapi` resource completed after 3m7s, since it depends on the
+cluster's resource ID) — billing started at this point. It then failed
+again on `azurerm_monitor_workspace.this`, the same
+`MissingSubscriptionRegistration` error as attempt 1 — the provider had not
+actually been registered yet.
+
+Fixed via `az provider register --namespace Microsoft.Monitor` in Cloud
+Shell, confirmed with:
+
+```
+$ az provider show --namespace Microsoft.Monitor --query registrationState -o tsv
+Registered
+```
+
+No repository change involved.
+
+*Attempt 3* succeeded:
+
+```
+Apply complete! Resources: 3 added, 1 changed, 0 destroyed.
+```
+
+Started 19:41, finished 19:54 (2026-09-16). This 13-minute window is only
+the final invocation — the cluster itself (`azurerm_kubernetes_cluster.this`)
+was actually created during attempt 2 above, so the true timeline is three
+attempts across the session, not one continuous 13-minute build.
+
+Final `terraform state list` (11 resources, matching this repo's own count
+of `resource` blocks across `cluster/*.tf`):
+
+```
+azapi_update_resource.app_routing_gateway_api
+azurerm_kubernetes_cluster.this
+azurerm_monitor_data_collection_endpoint.prometheus
+azurerm_monitor_data_collection_rule.prometheus
+azurerm_monitor_data_collection_rule_association.prometheus
+azurerm_monitor_workspace.this
+azurerm_resource_group.cluster
+azurerm_role_assignment.ci_aks_cluster_user
+azurerm_role_assignment.ci_aks_rbac_writer
+azurerm_role_assignment.kubelet_acr_pull
+azurerm_role_assignment.operator_aks_rbac_cluster_admin
+```
+
+(plus `data.azurerm_client_config.current`, a data source, not a resource.)
+
+Final `terraform output`:
+
+```
+cluster_name = "travel-agent"
+kubelet_identity_object_id = "8dcf9a8a-6074-423c-af40-a739c0203491"
+monitor_workspace_id = ".../Microsoft.Monitor/accounts/travel-agent-metrics"
+oidc_issuer_url = "https://germanywestcentral.oic.prod-aks.azure.com/18ff101d-9da4-499d-acc0-e9dbef4f4d8f/f5675991-3c9e-4edc-9b54-4c7e776b69ba/"
+resource_group_name = "travel-agent-cluster"
+```
+
+**Task 8.7 — node OS disk.** `terraform state show
+azurerm_kubernetes_cluster.this`:
+
+```
+os_disk_size_gb = 128
+os_disk_type = "Managed"
+```
+
+Settles `design.md`'s Open Question two ways: the disk is not ephemeral,
+so the disk cost line in the cost table applies rather than being removed;
+128 GiB matches the P10 tier already priced there, assuming Premium SSD
+(AKS's typical OS-disk default) — the SKU tier itself is not independently
+re-confirmed against the actual disk (e.g. via `az disk list`), consistent
+with this design's existing "not verified, here's what would settle it
+further" convention rather than stated as a confirmed fact.

@@ -522,4 +522,4 @@ Sequencing constraint worth stating now: the platform resource group (ACR, Key V
 
 - **Which subscription, and whether it has a free-tier credit.** Affects nothing in the design and everything in whether the cost table matters.
 - **Whether `--enable-control-plane-metrics` is worth adding.** It is a separate flag on top of managed Prometheus, collecting API-server and etcd metrics. Extra ingestion for something nobody has asked to see on a cluster that lives for hours; not proposed, flagged so it is a decision rather than an omission.
-- **Node OS disk size and type.** The cost table prices both P6 and P10 because the default was not verified in this pass, and an ephemeral OS disk may remove the line entirely for VM sizes with local temp storage. Settled by reading the AKS node OS-disk defaults and confirming the chosen VM size has a temp disk.
+- **Node OS disk size and type — settled 2026-09-16.** Not ephemeral (`os_disk_type = "Managed"`), so the disk cost line stays; 128 GiB matches the P10 tier already priced. Full record: `docs/step9-raise-evidence.md`, task 8.7.
