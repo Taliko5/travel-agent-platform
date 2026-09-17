@@ -47,6 +47,7 @@ yarn-error.log*
 
 # local env files
 .env*.local
+observability/grafana/.env
 
 # vercel
 .vercel
@@ -54,3 +55,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+
+# claude
+Claude outputs/

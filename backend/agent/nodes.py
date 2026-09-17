@@ -36,7 +36,7 @@ def classify_intent(state: AgentState) -> AgentState:
     matched = next((valid for valid in VALID_INTENTS if valid in raw_intent), None)
 
     # Fall back to "general" when the response matches none of the valid intents.
-    # Fallback-dimension rationale: docs/step8-task9c9d.md panel 5.
+    # Fallback-dimension rationale: observability/grafana/dashboards/README.md panel 5.
     fallback = matched is None
     intent = matched if matched is not None else "general"
 
@@ -52,9 +52,9 @@ def retrieve_context_node(state: AgentState) -> AgentState:
     try:
         context = retrieve_context(state["user_input"])
     finally:
-        # An attempt, not a success count — design.md D17. In `finally` so
-        # recording cannot decide whether the retrieval runs, matching how
-        # `/chat` records its own duration.
+        # An attempt, not a success count — step8-metric-design design.md D17.
+        # In `finally` so recording cannot decide whether the retrieval runs,
+        # matching how `/chat` records its own duration.
         rag_retrieval_count.add(1, {"intent": state["intent"]})
     return {
         **state,

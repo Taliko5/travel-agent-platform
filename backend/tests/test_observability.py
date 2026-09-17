@@ -77,8 +77,9 @@ class TestMetricsEndpoint:
         body = response.text
         assert "intent_classification_total" in body
         assert "rag_retrieval_total" in body
-        # chat_request_duration_seconds is not asserted absent — see tasks.md
-        # Section 9 ("Fix counter seeding") for why it's order-dependent.
+        # chat_request_duration_seconds is not asserted absent — see
+        # step8-observability-scaffold's tasks.md Section 9
+        # ("Fix counter seeding") for why it's order-dependent.
         assert "llm_call_duration_seconds" not in body
 
 

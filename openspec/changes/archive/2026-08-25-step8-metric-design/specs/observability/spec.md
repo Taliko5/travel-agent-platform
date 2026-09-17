@@ -1,41 +1,5 @@
 ## MODIFIED Requirements
 
-### Requirement: Placeholder Metric Instruments for Key Metrics
-The system SHALL record all four key metrics with explicitly bounded label sets: `/chat` request latency, classified-intent counts, individual LLM call duration, and RAG context retrieval count. This supersedes the scaffold's requirement that all four instruments be declared but unrecorded.
-
-#### Scenario: A `/chat` request completes successfully
-- **WHEN** a `POST /chat` request completes without raising
-- **THEN** the system SHALL record one observation on `chat_request_duration_seconds` carrying an `intent` label and a `status` label
-- **AND** `status` SHALL be `ok`
-- **AND** `intent` SHALL be the intent the classifier resolved
-
-#### Scenario: A `/chat` request fails
-- **WHEN** a `POST /chat` request raises before returning a response
-- **THEN** the system SHALL still record one observation on `chat_request_duration_seconds`
-- **AND** `status` SHALL be `error`
-- **AND** `intent` SHALL be the intent the classifier resolved if the graph run had already produced one, and `unknown` otherwise
-
-#### Scenario: No third status value is ever produced
-- **WHEN** a `POST /chat` request completes by any path whatsoever, including cancellation or timeout
-- **THEN** the recorded `status` label SHALL be either `ok` or `error`, and SHALL NOT take any other value
-
-#### Scenario: An LLM call completes
-- **WHEN** a chat-model call made via `get_model().invoke(...)` completes, successfully or not
-- **THEN** the system SHALL record one observation on `llm_call_duration_seconds` carrying a `node` label and a `status` label
-- **AND** `node` SHALL be the name of the node whose span the call happened inside, or `unknown` where that name is no longer recoverable
-- **AND** `node` SHALL always be present, never omitted — a series identified by a missing label is not a permitted outcome
-- **AND** `status` SHALL be `ok` on success and `error` on failure
-
-#### Scenario: No third status value is ever produced on an LLM call
-- **WHEN** a chat-model call completes by any path whatsoever
-- **THEN** the recorded `status` label on `llm_call_duration_seconds` SHALL be either `ok` or `error`, and SHALL NOT take any other value
-
-#### Scenario: RAG context is retrieved
-- **WHEN** the `retrieve_context` node runs
-- **THEN** the system SHALL record one observation on `rag_retrieval_total` carrying an `intent` label
-- **AND** `intent` SHALL be the intent the classifier resolved for that request
-- **AND** the observation SHALL be recorded regardless of whether the retrieval itself succeeds
-
 ### Requirement: Automated Tests for Scaffolded Instrumentation
 The system SHALL include a test asserting that seeded counters appear on `/metrics` and that unseeded histograms do not. This supersedes the scaffold's requirement that the test assert all four declared instrument names appear.
 
@@ -44,6 +8,10 @@ The system SHALL include a test asserting that seeded counters appear on `/metri
 - **THEN** a test SHALL assert that the seeded counters are present in the `/metrics` body
 - **AND** SHALL assert that `llm_call_duration_seconds` is absent — this repository's `/chat` endpoint tests mock `api.main.graph` entirely, so no test ever invokes a real chat-model call through `OTelCallbackHandler`, regardless of that instrument having a recording call site
 - **AND** SHALL NOT assert the absence of `chat_request_duration_seconds`, because `/metrics` is process-global state and earlier tests in the same session record into it
+
+#### Scenario: Callback handler span-lifecycle test
+- **WHEN** the test suite runs
+- **THEN** a test SHALL assert that invoking `OTelCallbackHandler`'s success callbacks (`on_chain_start`/`on_chain_end`) ends the span it opened, and that invoking its error callbacks (`on_chain_error`, and equivalently `on_llm_error`/`on_tool_error`) also ends the span, without the handler itself raising or swallowing anything
 
 ### Requirement: LangGraph/LangChain Span Instrumentation via Callback Handler
 The system SHALL provide a `BaseCallbackHandler` (`OTelCallbackHandler`) that translates LangChain/LangGraph node, LLM, and tool callback events into spans, registered once at graph-invocation time, without requiring modifications to `backend/agent/graph.py` or `backend/agent/nodes.py`, and without altering the `AgentState` produced by a run or the propagation of exceptions raised during it. Span names SHALL identify an operation type, never a specific occurrence, and span attributes SHALL be limited to values a query would plausibly filter or group by — never the full text of a request's user input, a model's output, or any other free-text `AgentState` payload field. This supersedes the scaffold's requirement only by specifying what its span names and attributes must satisfy; the scaffold left both undecided.
@@ -82,7 +50,49 @@ The system SHALL provide a `BaseCallbackHandler` (`OTelCallbackHandler`) that tr
 - **WHEN** any span opened by `OTelCallbackHandler` — node, chat-model, or tool — is closed
 - **THEN** none of its attributes SHALL contain the request's user input, the model's output, or any other free-text `AgentState` payload field (e.g. retrieved context, a tool's raw response)
 
+## REMOVED Requirements
+
+### Requirement: Placeholder Metric Instruments for Key Metrics
+**Reason**: The instruments are no longer placeholders. This change gives them recording call sites and bounded label sets, so a requirement named for their placeholder state — and its `Instruments are declared but not yet recorded` scenario — describes a condition that no longer holds.
+**Migration**: Replaced by `### Requirement: Recorded Metric Instruments for Key Metrics`, which carries the same four instruments with their recording and labelling requirements.
+
 ## ADDED Requirements
+
+### Requirement: Recorded Metric Instruments for Key Metrics
+The system SHALL record all four key metrics with explicitly bounded label sets: `/chat` request latency, classified-intent counts, individual LLM call duration, and RAG context retrieval count. This supersedes the scaffold's requirement that all four instruments be declared but unrecorded.
+
+#### Scenario: A `/chat` request completes successfully
+- **WHEN** a `POST /chat` request completes without raising
+- **THEN** the system SHALL record one observation on `chat_request_duration_seconds` carrying an `intent` label and a `status` label
+- **AND** `status` SHALL be `ok`
+- **AND** `intent` SHALL be the intent the classifier resolved
+
+#### Scenario: A `/chat` request fails
+- **WHEN** a `POST /chat` request raises before returning a response
+- **THEN** the system SHALL still record one observation on `chat_request_duration_seconds`
+- **AND** `status` SHALL be `error`
+- **AND** `intent` SHALL be the intent the classifier resolved if the graph run had already produced one, and `unknown` otherwise
+
+#### Scenario: No third status value is ever produced
+- **WHEN** a `POST /chat` request completes by any path whatsoever, including cancellation or timeout
+- **THEN** the recorded `status` label SHALL be either `ok` or `error`, and SHALL NOT take any other value
+
+#### Scenario: An LLM call completes
+- **WHEN** a chat-model call made via `get_model().invoke(...)` completes, successfully or not
+- **THEN** the system SHALL record one observation on `llm_call_duration_seconds` carrying a `node` label and a `status` label
+- **AND** `node` SHALL be the name of the node whose span the call happened inside, or `unknown` where that name is no longer recoverable
+- **AND** `node` SHALL always be present, never omitted — a series identified by a missing label is not a permitted outcome
+- **AND** `status` SHALL be `ok` on success and `error` on failure
+
+#### Scenario: No third status value is ever produced on an LLM call
+- **WHEN** a chat-model call completes by any path whatsoever
+- **THEN** the recorded `status` label on `llm_call_duration_seconds` SHALL be either `ok` or `error`, and SHALL NOT take any other value
+
+#### Scenario: RAG context is retrieved
+- **WHEN** the `retrieve_context` node runs
+- **THEN** the system SHALL record one observation on `rag_retrieval_total` carrying an `intent` label
+- **AND** `intent` SHALL be the intent the classifier resolved for that request
+- **AND** the observation SHALL be recorded regardless of whether the retrieval itself succeeds
 
 ### Requirement: Metric Recording Is Additive
 The system SHALL record metrics as an addition to existing behaviour only. No recording site SHALL alter the `AgentState` a run produces, the response a `POST /chat` request returns, or the propagation of an exception raised while handling it.
