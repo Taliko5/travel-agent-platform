@@ -56,7 +56,8 @@ set_meter_provider(meter_provider)
 from observability import metrics  # noqa: E402
 
 # Seeding must happen via an explicit post-provider call, not import
-# position — see tasks.md Section 9 ("Fix counter seeding").
+# position — see step8-observability-scaffold's tasks.md Section 9
+# ("Fix counter seeding").
 metrics.seed_counters()
 
 configure_logging()
@@ -65,12 +66,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Runs after uvicorn's own Server has finished its logging setup (ASGI
-    # lifespan startup fires once the server is otherwise ready), so this
-    # reconfiguration can't be clobbered by uvicorn configuring these loggers
-    # later — unlike a module-import-time call, whose ordering relative to
-    # uvicorn's own setup isn't guaranteed. See uvicorn-structured-logging
-    # design.md D2.
+    # Runs after uvicorn's own logging setup, so it can't be clobbered by it
+    # running later — uvicorn-structured-logging design.md D2.
     for logger_name in ("uvicorn.access", "uvicorn.error"):
         uvicorn_logger = logging.getLogger(logger_name)
         uvicorn_logger.handlers = [build_json_handler()]
@@ -78,10 +75,17 @@ async def lifespan(_: FastAPI):
     yield
 
 
+def _cors_allowed_origins() -> list[str]:
+    origins = os.environ.get("CORS_ALLOWED_ORIGINS")
+    if not origins:
+        return ["http://localhost:3000"]
+    return [origin.strip() for origin in origins.split(",") if origin.strip()]
+
+
 app = FastAPI(title="travel agent API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_cors_allowed_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )

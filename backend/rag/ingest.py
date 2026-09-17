@@ -23,10 +23,15 @@ def load_documents():
 
 
 def main():
+    embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+
+    existing = Chroma(persist_directory=CHROMA_DIR, embedding_function=embeddings)
+    if existing.get(limit=1)["ids"]:
+        print(f"Chroma store at {CHROMA_DIR} already has documents, skipping ingestion")
+        return
+
     documents = load_documents()
     print(f"Loaded {len(documents)} documents")
-
-    embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
 
     Chroma.from_documents(
         documents=documents, embedding=embeddings, persist_directory=CHROMA_DIR

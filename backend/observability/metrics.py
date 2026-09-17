@@ -20,15 +20,9 @@ from opentelemetry import metrics
 
 meter = metrics.get_meter("travel-agent-backend")
 
-# /chat request latency.
-# Recorded in the POST /chat route handler in backend/api/main.py, in a
-# `finally` block so failed requests are measured too.
-# Labels: intent (4 values + "unknown"), status (ok|error) — 10 series max.
-# Boundaries: agreed replacement from the 2026-08-11 measurement, tasks.md
-# Section 1 ("Re-tune chat_request_duration_seconds bucket boundaries") —
-# not the scaffold's original guess. Retains 0.5/1.0/2.0 for the still-empty
-# error path; 5.0-10.0 at 1s steps, where 121 of 127 observed requests
-# landed; 12/15/20 subdividing the weather tail.
+# /chat request latency, recorded in backend/api/main.py's POST /chat handler.
+# Boundaries: measured re-tune, not the scaffold's guess — step8-metric-design
+# design.md D5, tasks.md Section 1.
 chat_request_duration = meter.create_histogram(
     name="chat_request_duration_seconds",
     unit="s",
@@ -52,27 +46,17 @@ chat_request_duration = meter.create_histogram(
 )
 
 # Classifier health, not intent distribution — fallback-dimension rationale in
-# docs/step8-task9c9d.md panels 3 & 5. Labels: intent, fallback (true|false).
+# observability/grafana/dashboards/README.md panels 3 & 5.
+# Labels: intent, fallback (true|false).
 intent_classification_count = meter.create_counter(
     name="intent_classification_total",
     unit="1",
     description="Count of requests by classified intent.",
 )
 
-# LLM call duration.
-# Recorded in OTelCallbackHandler.on_llm_end/on_llm_error — see design.md D14.
-# Labels: node (classify_intent|call_weather_tool|generate_response, or
-# unknown if the enclosing span was evicted), status (ok|error) — 8 series max.
-# Boundaries: the one measured re-tune D5 allows, spent on the 2026-08-22
-# 17:57:53-18:10:15 run, tasks.md Section 1 / design.md D18 — not the D16
-# coarse starting set. classify_intent/call_weather_tool's fast tail sits in
-# 0.5-2.0s with no observation ever below 0.5; generate_response's calls sit
-# in 3.0-7.0s. 1.5 splits the former without direct sub-bucket evidence (D18
-# says so explicitly); 4.0/6.0 split the latter at the same 1s floor
-# chat_request_duration_seconds's own re-tune used, one layer down. These
-# boundaries hold no data until traffic next runs — see D18's last paragraph.
-# 30.0 is the empty-but-deliberate tail marker: without it a slow-failing call
-# reports only +Inf. Same reasoning as chat_request_duration_seconds's 12-60.
+# LLM call duration, recorded in OTelCallbackHandler.on_llm_end/on_llm_error.
+# Labels (node, status) and the one measured boundary re-tune this instrument
+# gets — step8-metric-design design.md D14/D15/D18.
 llm_call_duration = meter.create_histogram(
     name="llm_call_duration_seconds",
     unit="s",
@@ -92,10 +76,8 @@ llm_call_duration = meter.create_histogram(
     ],
 )
 
-# RAG retrieval rate.
-# Recorded in agent/nodes.py's retrieve_context_node — see design.md D17.
-# Labels: intent (VALID_INTENTS) — 4 series max. Recorded unconditionally
-# (attempt semantics), so no status label.
+# RAG retrieval rate, recorded unconditionally (attempt semantics) in
+# agent/nodes.py's retrieve_context_node — step8-metric-design design.md D17.
 rag_retrieval_count = meter.create_counter(
     name="rag_retrieval_total",
     unit="1",
@@ -128,9 +110,7 @@ def seed_counters() -> None:
     for intent in VALID_INTENTS:
         for fallback in ("true", "false"):
             intent_classification_count.add(0, {"intent": intent, "fallback": fallback})
-    # Labelled, not bare — design.md D17 supersedes the original bare
-    # .add(0): a label-less seed left in place alongside a labelled
-    # recording site would produce an intent="" series alongside the real
-    # ones, the exact pollution D3 refused for intent_classification_total.
+    # Labelled, not bare — step8-metric-design design.md D17 supersedes the
+    # original bare .add(0), avoiding the pollution D3 refused.
     for intent in VALID_INTENTS:
         rag_retrieval_count.add(0, {"intent": intent})

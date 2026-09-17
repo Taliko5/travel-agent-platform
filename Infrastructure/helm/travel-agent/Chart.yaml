@@ -1,0 +1,9 @@
+apiVersion: v2
+name: travel-agent
+description: >-
+  Kubernetes workload for the travel agent platform — backend, frontend,
+  ingress and secret delivery, running on Azure resources provisioned
+  separately by Terraform.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

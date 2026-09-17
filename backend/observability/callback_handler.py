@@ -105,7 +105,7 @@ def _record_llm_call(entry: "_OpenSpan | None", status: str) -> None:
     duration = time.perf_counter() - entry.started
     # `node` is always present, falling back to "unknown" when the enclosing
     # node's span has been evicted: a series distinguishable only by a missing
-    # label is the shape design.md D3/D17 refused for the counters.
+    # label is the shape step8-metric-design design.md D3/D17 refused for the counters.
     attributes: dict[str, Any] = {
         "status": status,
         "node": entry.parent_name or "unknown",
