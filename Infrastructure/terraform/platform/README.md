@@ -18,8 +18,7 @@ registry ID, the vault name) to attach to. The order is:
    credential, which is skipped (`count = 0`) — `terraform output
    backend_federated_credential_configured` reads `false`.
 2. Apply `Infrastructure/terraform/cluster/`, feeding it this state's
-   `acr_id`, `key_vault_id`, `key_vault_name` and `key_vault_tenant_id`
-   outputs.
+   `acr_id` and `ci_identity_principal_id` outputs.
 3. Apply here again with the same `-var="operator_object_id=..."` used in
    step 1 (if one was passed) plus
    `-var="aks_oidc_issuer_url=$(terraform -chdir=../cluster output -raw oidc_issuer_url)"`.
