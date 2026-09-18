@@ -429,3 +429,7 @@ Command: `az resource list --query "[?resourceGroup=='travel-agent-cluster'].{na
 
 No cluster, no node pool, no load balancer, no public IP, and no orphaned
 `MC_*` node resource group remain from this session.
+
+## CI RBAC Cluster Admin grant (2026-09-18)
+
+Resolved and tested working — CI granted "Azure Kubernetes Service RBAC Cluster Admin" (PR #13: https://github.com/Taliko5/travel-agent-platform/pull/13).
