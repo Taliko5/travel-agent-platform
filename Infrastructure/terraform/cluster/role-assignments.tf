@@ -8,10 +8,12 @@ resource "azurerm_role_assignment" "ci_aks_cluster_user" {
   principal_id         = var.ci_identity_principal_id
 }
 
-# Lets CI's `helm upgrade --install` create and update the chart's objects — design.md D4.
-resource "azurerm_role_assignment" "ci_aks_rbac_writer" {
+# Lets CI's `helm upgrade --install` create and update the chart's objects, including the CRDs
+# (SecretProviderClass, Gateway, HTTPRoute) built-in Azure RBAC roles below Cluster Admin don't
+# cover — design.md D4's mechanism note.
+resource "azurerm_role_assignment" "ci_aks_rbac_cluster_admin" {
   scope                = azurerm_kubernetes_cluster.this.id
-  role_definition_name = "Azure Kubernetes Service RBAC Writer"
+  role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
   principal_id         = var.ci_identity_principal_id
 }
 
