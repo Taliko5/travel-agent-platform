@@ -363,7 +363,7 @@ jobs:
         uses: azure/setup-kubectl@v4
 
       - name: Set up kubelogin
-        uses: azure/use-kubelogin@v3
+        uses: azure/use-kubelogin@v1
         with:
           kubelogin-version: 'latest'
         env:
