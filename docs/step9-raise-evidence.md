@@ -817,3 +817,13 @@ Three queries, each scoped to `namespace="default"`, `container=~"backend|fronte
 3. `container_cpu_cfs_throttled_periods_total{namespace="default",container=~"backend|frontend"}` — current values: frontend 31.39, backend 35.17 and 35 (two series); step-increase pattern consistent with a cumulative counter.
 
 All three queries returned real, non-zero data scoped to the deployed containers, confirming managed Prometheus is actively collecting cAdvisor metrics for the running backend/frontend pods per `design.md` D8.
+
+**Task 9.11 — Grafana datasource.**
+
+Added a second datasource on the existing local Grafana, using the `grafana-azureprometheus-datasource` plugin rather than the core Prometheus datasource — Azure AD auth on core Prometheus is deprecated in Grafana 13, this plugin is the current supported path. Points at the managed Prometheus workspace already named above (task 9.10). Auth: App Registration `travel-agent-grafana-local`, created for this local verification only — **not Terraform-managed**, not a tracked resource. `docker-compose.yaml`'s `grafana` service gained `GF_INSTALL_PLUGINS=grafana-azureprometheus-datasource` and `GF_AUTH_AZURE_AUTH_ENABLED=true`.
+
+Verified in Explore, against the new datasource:
+- `up` — live series across multiple jobs (`cadvisor`, `kubelet`, `node`, `networkobservability-retina`).
+- `sum(rate(container_cpu_usage_seconds_total{job="cadvisor"}[5m])) by (pod)` — live, moving CPU-usage data broken out by real AKS pod names (`travel-agent-gateway-approuting-istio`, `coredns`, `konnectivity-agent`, `metrics-server`, `ama-metrics-*`, `azure-cns-*`) — confirms real cluster telemetry, not a static series.
+
+Existing local `Prometheus` datasource (`prometheus:9090`), its provisioning file, and its history are unchanged — both datasources coexist in the Data sources list.
