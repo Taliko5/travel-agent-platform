@@ -936,3 +936,15 @@ $ az resource list --resource-group travel-agent-cluster -o table
 ResourceGroupNotFound
 ```
 `ResourceGroupNotFound` is a stronger confirmation than an empty resource list — the cluster resource group is itself one of the 11 destroyed resources (task 7.1's inventory), so there is nothing left for a resource list to even scope against. No per-hour billable resource from the session remains.
+
+**Task 10.3 — Registry, vault and identities survive teardown.**
+
+```
+$ az resource list --resource-group travel-agent-platform -o table
+```
+All 4 platform resources present, all Status `Succeeded`: `travelagentacr52f2y82s` (`Microsoft.ContainerRegistry/registries`), `travel-agent-backend` and `travel-agent-ci` (`Microsoft.ManagedIdentity/userAssignedIdentities`), `travel-agent-kv-52f2y82s` (`Microsoft.KeyVault/vaults`).
+
+```
+$ az keyvault secret show --vault-name travel-agent-kv-52f2y82s --name google-api-key --query "{name:name, enabled:attributes.enabled}" -o table
+```
+`google-api-key`, Enabled: `True` — still readable for the next raise (value not shown, per `CLAUDE.md`).
