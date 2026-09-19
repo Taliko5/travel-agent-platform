@@ -784,3 +784,22 @@ All six facts match across the pod replacement; only the LLM's phrasing differs,
 **Task 9.8 — Reproducibility.**
 
 Reviewed every command run between task 8.1 and task 9.7 (this cycle). All `terraform apply` invocations match the exact sequences `Infrastructure/terraform/platform/README.md` and `Infrastructure/terraform/cluster/README.md` document (including the var flags and their sourcing between the two states). Task 8.2's CI-variable setup via the GitHub Settings UI is itself the documented step (`tasks.md` 6.7/8.2, `design.md` D4). Every command run in Section 9 today (9.1–9.7) was either a read-only measurement/verification command (`kubectl get`/`describe`, `az show`/`list`, `curl`) with no effect on deployed state, or task 9.7's own explicitly-required pod deletion (exercising the Deployment controller's own reconciliation, not a manual fix). The one command not written anywhere in the repository is task 8.3's `az keyvault secret set ... --value <key>` — supplying `GOOGLE_API_KEY`'s value, which `design.md` D5 deliberately keeps out of Terraform, and which per 7.5.3 only runs once across the whole raise/destroy sequence (the platform state, and therefore the vault secret, isn't destroyed between cycles). This matches exactly what the spec allows: the reproducibility gap is empty except for supplying the secret value. No defect to fix in Sections 3–6.
+
+**Task 9.9 — Parameterisation.**
+
+No new commit was needed — `main`'s own history already contains a clean pair of consecutive CI-triggered deploys satisfying this task, so this is verified retrospectively rather than by triggering a fresh one.
+
+```
+$ git log main --oneline -- Infrastructure/helm/
+ce4f8cd fix: decrease cpu backend (#14)
+7139cc8 Feat/task 9 (#10)
+
+$ git diff ce4f8cd c127b2f -- Infrastructure/helm/
+(empty — no chart or values file changed)
+
+$ git diff --stat ce4f8cd c127b2f
+ docs/step9-raise-evidence.md | 41 +++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 41 insertions(+)
+```
+
+`ci.yml`'s `push` job has no path gating, so this still triggered a full rebuild and `helm upgrade --install` — driven only by the new commit SHA, even though nothing but this evidence file changed.
