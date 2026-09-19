@@ -677,3 +677,43 @@ Handling connection for 8080
 | `POST /chat` (transportation) | `api.travel-agent.internal` | Real, LLM-generated `transportation`-intent response |
 
 Frontend returned HTTP 200 for `travel-agent.internal`; backend returned two real, LLM-generated responses for `api.travel-agent.internal` — a `weather`-intent question (Paris) and a `transportation`-intent question (Seoul to Rome), independent from task 9.2's Tokyo measurement and from each other, confirming the backend served each specific request through the Gateway/HTTPRoute path rather than a cached or reused result, and that intent classification and routing both hold across a second, different intent on this same tunnel. All requests went to the same Service (`travel-agent-gateway-approuting-istio`) routed by hostname — this is the Gateway and HTTPRoute actually doing the routing (task 9.5's concern), exercised here as a byproduct; task 9.5 still separately confirms routing and that neither Service is individually reachable from outside the cluster.
+
+**Task 9.5 — Routing.**
+
+**(1) Gateway-side control-plane confirmation** that both `HTTPRoute`s are actually attached and valid — the piece task 9.4 didn't check (9.4 tested from the client side; this confirms the Gateway API objects themselves report success):
+```
+$ kubectl get httproute -o wide
+NAME                    HOSTNAMES                       AGE
+travel-agent-backend    ["api.travel-agent.internal"]   3h56m
+travel-agent-frontend   ["travel-agent.internal"]       3h56m
+
+$ kubectl describe httproute travel-agent-frontend
+... (Parent Refs: Gateway travel-agent-gateway, Section Name: frontend; Rules → Backend Refs: Service travel-agent-frontend, Port 80)
+Status → Conditions: Accepted=True ("Route was valid"), ResolvedRefs=True ("All references resolved")
+Controller Name: istio.aks.azure.com/gateway-controller
+
+$ kubectl describe httproute travel-agent-backend
+... (Parent Refs: Gateway travel-agent-gateway, Section Name: backend; Rules → Backend Refs: Service travel-agent-backend, Port 80)
+Status → Conditions: Accepted=True ("Route was valid"), ResolvedRefs=True ("All references resolved")
+Controller Name: istio.aks.azure.com/gateway-controller
+```
+
+**(2) Neither Service individually reachable from outside the cluster** — both are ClusterIP, no LoadBalancer/NodePort, no EXTERNAL-IP:
+```
+$ kubectl get svc travel-agent-backend travel-agent-frontend -o wide
+NAME                    TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE     SELECTOR
+travel-agent-backend    ClusterIP   10.0.53.21     <none>        80/TCP    3h59m   app=travel-agent-backend
+travel-agent-frontend   ClusterIP   10.0.240.111   <none>        80/TCP    3h59m   app=travel-agent-frontend
+```
+
+| HTTPRoute | Hostname | Parent Gateway section | Backend Service | Accepted | ResolvedRefs |
+|---|---|---|---|---|---|
+| `travel-agent-frontend` | `travel-agent.internal` | `frontend` | `travel-agent-frontend:80` | True | True |
+| `travel-agent-backend` | `api.travel-agent.internal` | `backend` | `travel-agent-backend:80` | True | True |
+
+| Service | Type | CLUSTER-IP | EXTERNAL-IP |
+|---|---|---|---|
+| `travel-agent-backend` | ClusterIP | 10.0.53.21 | `<none>` |
+| `travel-agent-frontend` | ClusterIP | 10.0.240.111 | `<none>` |
+
+Both routes are cleanly accepted and resolved by the Gateway's controller (`istio.aks.azure.com/gateway-controller`), each bound to its own Gateway listener section (`frontend`/`backend`) and backing the matching Service on port 80 — this is the control-plane half of "requests reach both services through the `Gateway` and `HTTPRoute`"; the data-plane half (that traffic actually flows and gets a real response through this exact path) is task 9.4's already-recorded curl results, not repeated here. Both Services being ClusterIP with no EXTERNAL-IP means there is no network path to either Service from outside the cluster at all except through the Gateway (or an already-authenticated `kubectl` tunnel, which is D2/D15's designed operator access path, not "outside the cluster" reachability in the sense this task means) — no LoadBalancer, no NodePort, nothing an external client without cluster credentials could hit directly.
