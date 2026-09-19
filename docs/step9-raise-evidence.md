@@ -893,3 +893,24 @@ $ kubectl get pv
 **Inference** (based on `CLAUDE.md`'s architecture section, `rag/ingest.py` storing embeddings in ChromaDB): this PVC is the RAG vector store — application data, not a metrics-storage or dashboard workload. Named explicitly so it's clear it was seen and considered, not missed; out of scope for this task's specific claim.
 
 **Conclusion:** no StatefulSet, no self-hosted Prometheus/Grafana/Loki-shaped workload, and the cluster's only persistent volume is unrelated to observability. Destroying this cluster destroys no observability history.
+
+**Task 9.15 — Grant revocation.**
+
+```
+$ az role assignment delete --assignee f2739b2d-73ba-48c1-a843-8cbfea73cf5f --role "Key Vault Secrets User" \
+    --scope /subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourceGroups/travel-agent-platform/providers/Microsoft.KeyVault/vaults/travel-agent-kv-52f2y82s
+$ kubectl rollout restart deployment/travel-agent-backend
+```
+
+The new pod's CSI volume mount failed cleanly (`kubectl describe pod`, Events):
+```
+Warning FailedMount ... failed to mount secrets store objects ... failed to get objectType:secret, objectName:google-api-key ...
+RESPONSE 403: Forbidden, ERROR CODE: Forbidden, innererror.code: ForbiddenByRbac, Action: 'Microsoft.KeyVault/vaults/secrets/getSecret/action', Assignment: (not found).
+```
+Pod stuck at `Init:0/1` the whole time — it never reached `Running`, so it could not have served from any cached credential. This is the behavioural counterpart to task 9.3's structural claim (no cacheable credential exists): here it's shown actually failing, not just theoretically unable to.
+
+```
+$ az role assignment create --assignee f2739b2d-73ba-48c1-a843-8cbfea73cf5f --role "Key Vault Secrets User" \
+    --scope /subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourceGroups/travel-agent-platform/providers/Microsoft.KeyVault/vaults/travel-agent-kv-52f2y82s
+```
+No further `kubectl` action needed — kubelet was already retrying the failed CSI mount on the same stuck pod automatically. Time from restore command to the pod reaching `Running`/`Ready` (1/1): ~1.5 minutes. Per `design.md` D4, this propagation delay is documented behaviour, not a failure — the measurement recorded here is the delay itself, not a defect.
