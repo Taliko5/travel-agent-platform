@@ -429,3 +429,44 @@ Command: `az resource list --query "[?resourceGroup=='travel-agent-cluster'].{na
 
 No cluster, no node pool, no load balancer, no public IP, and no orphaned
 `MC_*` node resource group remain from this session.
+
+## CI RBAC Cluster Admin grant (2026-09-18)
+
+Resolved and tested working — CI granted "Azure Kubernetes Service RBAC Cluster Admin" (PR #13: https://github.com/Taliko5/travel-agent-platform/pull/13).
+
+### Cycle 2 — 2026-09-19
+
+**Task 8.6 — cluster state apply, run in Azure Cloud Shell (cluster dir).**
+
+Command:
+```
+terraform apply
+```
+
+Output:
+
+```
+Apply complete! Resources: 11 added, 0 changed, 0 destroyed.
+```
+
+Single attempt, no errors. Task 8.6.1 (platform re-apply) is next.
+
+**Task 8.6.1 — platform re-apply, run in the platform dir.**
+
+Command:
+```
+terraform apply \
+  -var="operator_object_id=$(az ad signed-in-user show --query id -o tsv)" \
+  -var="aks_oidc_issuer_url=$(terraform -chdir=../cluster output -raw oidc_issuer_url)"
+```
+
+Output:
+
+```
+azurerm_federated_identity_credential.backend_serviceaccount[0]: Modifying...
+azurerm_federated_identity_credential.backend_serviceaccount[0]: Modifications complete after 1s
+
+Apply complete! Resources: 0 added, 1 changed, 0 destroyed.
+```
+
+Confirmed: `terraform output backend_federated_credential_configured` → `true`.
