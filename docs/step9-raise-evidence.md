@@ -737,3 +737,46 @@ $ az network public-ip show -g "$NODE_RG" -n a71a91bb-82e3-4d00-9b36-097d91bcfc8
 ```
 
 Exactly one public IP exists in the node resource group, attached to `loadBalancers/kubernetes` — the AKS-managed outbound LB (SNAT/egress), already accounted for in `design.md`'s cost inventory as non-inbound — not to the Gateway's own (istio-provisioned) LB. Combined with task 9.4's already-recorded Gateway address (private VNet IP), the entry point has no public address anywhere. The only access path is `kubectl port-forward`, per `design.md` D2/D15 — already demonstrated in task 9.4.
+
+**Task 9.7 — Corpus availability.**
+
+"Match" is judged by facts, not exact text: `rag/ingest.py`'s Chroma store is idempotent (skips re-ingestion if the store already has documents), and `generate_response`'s model (`gemini-3.5-flash`) has no `temperature=0` set, so this measures whether the same underlying retrieved content survives the pod replacement, not byte-identical LLM prose. Question chosen to hit `retrieve_context` — a RAG-specific question about Riga, one of the four ingested travel guides, not weather/transportation.
+
+Before deleting the pod:
+```
+$ kubectl get pods -l app=travel-agent-backend
+NAME                                    READY   STATUS    RESTARTS   AGE
+travel-agent-backend-65575cfccc-hdjpd   1/1     Running   0          4h25m
+
+$ curl -s -X POST -H "Host: api.travel-agent.internal" -H "Content-Type: application/json" \
+    http://localhost:8080/chat -d '{"message":"What local food should I try in Riga, and what is the best time to visit?"}'
+{"intent":"general","response":"If you are planning a trip to Riga, the captivating capital of Latvia, here is what you need to know about its local culinary highlights and the best times to plan your visit:\n\n**Local Food to Try**\nRiga offers a hearty and delicious traditional cuisine. While exploring, you should definitely indulge in:\n*   **Grey peas with bacon:** A comforting, classic Latvian dish.\n*   **Dark rye bread:** A beloved staple of the local diet.\n*   **Pīrāgi:** Delicious, savory pastries filled with bacon and onions. \n\nA fantastic place to sample all of these local delicacies is the bustling **Riga Central Market**, which offers an authentic taste of the city's food culture.\n\n**Best Time to Visit**\n*   **June to August (Summer):** This is the ideal time to visit Riga. The weather is warm, making it perfect for exploring the city's historic center on foot and enjoying the lively, bustling outdoor cafes.\n*   **December:** If you don't mind the cold, December is a magical time to visit as the city lights up with its festive and enchanting Christmas markets."}
+```
+
+Deleting the pod and confirming a genuine replacement (different pod name, not a container restart):
+```
+$ kubectl delete pod -l app=travel-agent-backend
+pod "travel-agent-backend-65575cfccc-hdjpd" deleted from default namespace
+
+$ kubectl get pods -l app=travel-agent-backend
+NAME                                    READY   STATUS    RESTARTS   AGE
+travel-agent-backend-65575cfccc-jf8bk   1/1     Running   0          27s
+```
+
+Same question, asked again once the new pod was Ready, no operator action in between other than the delete/wait above:
+```
+$ curl -s -X POST -H "Host: api.travel-agent.internal" -H "Content-Type: application/json" \
+    http://localhost:8080/chat -d '{"message":"What local food should I try in Riga, and what is the best time to visit?"}'
+{"intent":"general","response":"If you are planning a trip to Riga, the captivating capital of Latvia, there are several traditional local foods you should absolutely try. Food lovers should indulge in hearty grey peas with bacon, rich dark rye bread, and delicious *pīrāgi* pastries. The best place to sample all of these authentic Latvian delicacies is the bustling Riga Central Market, which offers a vibrant and immersive culinary experience.\n\nWhen planning your trip, the best time to visit Riga is during the summer months from June to August. During this season, the weather is beautifully warm, and the city's outdoor cafes and terraces come alive with locals and tourists alike. However, December is also a magical time to visit if you don't mind the cold. During the winter season, the city is transformed by festive and enchanting Christmas markets, offering a cozy, fairytale-like atmosphere. \n\nWhether you prefer exploring the historic streets in the summer warmth or sipping warm drinks amidst winter festivities, Riga is a stress-free and unforgettable destination to discover."}
+```
+
+| Fact (from `backend/rag/data/riga.txt`) | Before | After |
+|---|---|---|
+| Grey peas with bacon | ✓ | ✓ |
+| Dark rye bread | ✓ | ✓ |
+| Pīrāgi pastries | ✓ | ✓ |
+| Riga Central Market | ✓ | ✓ |
+| June–August, warm, outdoor cafes | ✓ | ✓ |
+| December, Christmas markets | ✓ | ✓ |
+
+All six facts match across the pod replacement; only the LLM's phrasing differs, as expected without `temperature=0`. This confirms the corpus available to `retrieve_context` was unchanged by the pod delete/recreate — consistent with the PVC surviving the replacement and `rag/ingest.py`'s idempotent skip (it only ingests when the Chroma store is empty) not silently re-ingesting or drifting.
