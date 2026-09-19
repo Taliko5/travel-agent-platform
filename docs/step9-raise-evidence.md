@@ -434,6 +434,19 @@ No cluster, no node pool, no load balancer, no public IP, and no orphaned
 
 Resolved and tested working — CI granted "Azure Kubernetes Service RBAC Cluster Admin" (PR #13: https://github.com/Taliko5/travel-agent-platform/pull/13).
 
+## Task 9.2 — Secret delivery, partial validation (2026-09-18)
+
+Run against the same now-destroyed cluster used for the CI RBAC Cluster Admin validation above (2026-09-18), not the current Cycle 2 cluster.
+
+Command:
+```
+curl -s -X POST localhost:8000/chat -H "Content-Type: application/json" -d '{"message":"What is the weather in Tokyo?"}'
+```
+
+Output: a real, LLM-generated response (`"intent":"weather"`, several paragraphs describing Tokyo's weather and citing external weather sites) — confirms the backend obtained `GOOGLE_API_KEY` via the CSI Secrets Store driver and served a genuine `/chat` request.
+
+Resolved 2026-09-19 — see "Task 9.2" under "Cycle 2 — 2026-09-19" below: reconfirmed on the current cluster, and the mount is established as required from documented behaviour, so the without-mount ("not required") test does not apply.
+
 ### Cycle 2 — 2026-09-19
 
 **Task 8.6 — cluster state apply, run in Azure Cloud Shell (cluster dir).**
@@ -470,3 +483,93 @@ Apply complete! Resources: 0 added, 1 changed, 0 destroyed.
 ```
 
 Confirmed: `terraform output backend_federated_credential_configured` → `true`.
+
+**Task 9.1 — Capacity.**
+
+Two nodes (`Standard_D2s_v7`, 2 vCPU/8GiB each). Capacity: cpu=2, memory≈8126902Ki, pods=250. Allocatable: cpu=1900m, memory≈5927350Ki (200m/~200Mi reserved for system).
+
+Allocated (`kubectl describe node`):
+- Node `aks-system-17502231-vmss000000`: requests cpu 1800m/1900m (94%), memory 4326Mi (74%); limits cpu 23340m (1228%, overcommitted), memory 44294432Ki (747%)
+- Node `aks-system-17502231-vmss000001`: requests cpu 1856m/1900m (97%), memory 4304Mi (74%); limits cpu 15642m (823%), memory 27892Mi (481%)
+
+No pod is `Pending` — all 22 (node 0) + 18 (node 1) non-terminated pods are scheduled and, per `kubectl top pods -A`, reporting live usage in the single-digit mCPU / tens-of-MiB range, far below their requests.
+
+Per-addon requests now measured, replacing `design.md` D14's "not known, not guessed" placeholder:
+
+| Component | CPU request | Memory request | Pods |
+|---|---|---|---|
+| `istiod` | 500m | 2Gi | ×2 (one per node) |
+| `ama-metrics` | 170m | 550Mi | ×2 |
+| `ama-metrics-ksm` | 5m | 50Mi | ×1 |
+| `ama-metrics-node` | 70m | 200Mi | ×2 |
+| `ama-metrics-operator-targets` | 11m | 60Mi | ×1 |
+| `aks-secrets-store-csi-driver` | 33m | 108Mi | ×2 |
+| `aks-secrets-store-provider-azure` | 16m | 50Mi | ×2 |
+| `metrics-server` | 156m | 138Mi | ×2 |
+| `coredns` | 100m | 70Mi | ×2 |
+| `konnectivity-agent` | 20m | 20Mi | ×2 |
+| `retina-agent` | 100m | 200Mi | ×2 |
+| `azure-cns` | 65m | 300Mi | ×2 |
+| `kube-proxy` | 100m | — | ×2 |
+| `cloud-node-manager` | 50m | 50Mi | ×2 |
+| `csi-azuredisk-node` | 30m | 60Mi | ×2 |
+| `csi-azurefile-node` | 40m | 80Mi | ×2 |
+| `azure-ip-masq-agent` | 50m | 36Mi | ×2 |
+| `azure-wi-webhook-controller-manager` | 100m | 20Mi | ×2 |
+
+App pods:
+
+| Component | CPU request | Memory request | Pods |
+|---|---|---|---|
+| `travel-agent-backend` | 100m | 256Mi | ×1 |
+| `travel-agent-frontend` | 100m | 128Mi | ×1 |
+| `travel-agent-gateway-approuting-istio` | 100m | 128Mi | ×2 |
+
+**Headroom finding.** Little to no CPU-request headroom remains on this node pool for `travel-agent-gateway-approuting-istio`'s HPA (min 2, max 5) to scale past 2 replicas.
+
+| Node | Add-ons only | + app pods (100m each) | Total request | % of 1900m allocatable |
+|---|---|---|---|---|
+| node 0 | 1600m (84%) | `travel-agent-backend`, `travel-agent-gateway-approuting-istio` (+200m) | 1800m | 94% |
+| node 1 | 1656m (87%) | `travel-agent-frontend`, `travel-agent-gateway-approuting-istio` (+200m) | 1856m | 97% |
+
+Concretely:
+
+| # | Scenario | Needs | Headroom available | Likely outcome |
+|---|---|---|---|---|
+| 1 | HPA scales `travel-agent-gateway-approuting-istio` to a 3rd replica | +100m | ~44–100m free per node | Scale-out likely leaves the new pod `Pending` |
+| 2 | Rolling update of any of the three app Deployments (old+new pod coexist) | +100m | ~44–100m free per node | Also tight |
+| 3 | Either case above needs an extra node | — | `cluster/variables.tf`'s node pool has a fixed `node_count`, no cluster autoscaler configured | Neither case self-resolves by adding a node |
+
+**Task 9.2 — Secret delivery, reconfirmed on the current Cycle 2 cluster.**
+
+Backend pod running:
+```
+$ kubectl get pods -l app=travel-agent-backend
+NAME                                    READY   STATUS    RESTARTS   AGE
+travel-agent-backend-65575cfccc-hdjpd   1/1     Running   0          56m
+```
+
+Real `/chat` served from inside the backend container (the gateway is an internal LB, so the request is issued on-cluster):
+```
+$ kubectl exec deploy/travel-agent-backend -c backend -- \
+    curl -s -X POST localhost:8000/chat -H "Content-Type: application/json" \
+    -d '{"message":"What is the weather in Tokyo?"}'
+{"intent":"weather","response":"Currently, the weather in Tokyo is a very pleasant and comfortable 21.1°C ... [full multi-paragraph LLM response, citing the Japan Meteorological Agency and Weather.com / AccuWeather]"}
+```
+An LLM-generated `weather`-intent response — confirms the backend obtained `GOOGLE_API_KEY` and served a genuine request on this cluster.
+
+The synced Kubernetes Secret exists and carries the key (value not shown):
+```
+$ kubectl get secret travel-agent-secrets \
+    -o jsonpath='{.metadata.name} type={.type} keys={.data.google-api-key}'
+travel-agent-secrets type=Opaque keys=<present, value not shown>
+```
+
+**CSI volume mount necessity.** The mount is required; the task's "not required" branch does not apply, so the without-mount test was not run. Basis:
+- design.md D5 quotes Azure's CSI docs: the Key Vault → Kubernetes Secret sync is driven by a pod mounting the `SecretProviderClass`, in both directions ("your secrets sync after you start a pod to mount them … when you delete the pods … your Kubernetes secret is also deleted").
+- The synced Secret's only origin is that CSI sync — no standalone `Secret` manifest exists in the chart:
+```
+$ git grep -nE '^kind:\s*Secret\b' -- Infrastructure/
+(no standalone Secret manifest)
+```
+  the only references to `travel-agent-secrets` are the two `secretKeyRef` reads in `backend-deployment.yaml` and the default in `values.yaml`, so the mount is what produces the Secret the `secretKeyRef` reads. On this freshly rebuilt cluster the Secret is present with no manual creation step in the deploy path, i.e. it was produced by the CSI sync during the current cluster's life. This confirms D5's [Risk] item (the mount is present and the mount-driven sync is in effect); the stronger claim that removing the mount breaks delivery rests on D5's documented behaviour and was not separately re-tested.
