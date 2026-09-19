@@ -634,3 +634,46 @@ Variables (8):
 This is exactly `design.md` D4's 8-identifier inventory (tasks 6.7 + 8.2) — also independently confirms what `tasks.md` 6.7/8.2 themselves flagged as unverified from an environment without `gh` CLI/token.
 
 **Conclusion.** None of the 8 is a credential that would still authenticate if copied out — all are non-secret identifiers (hostname, resource names, tenant/subscription/client IDs), not bearer credentials; both auth paths that matter (`azure/login` for CI, the backend's Key Vault access) go through OIDC/workload-identity federation (D4, D5), whose trust is scoped server-side, so a client ID alone doesn't authenticate outside its federated context. Zero secrets configured at all, consistent with D4/D13's OIDC-only posture.
+
+**Task 9.4 — End-to-end through the browser client.**
+
+The task's title says "through the browser client," but `design.md` D2/D15 already establish that this Gateway is internal-only with no public IP specifically so it's never internet-reachable, and that the operator's designed access path IS `kubectl port-forward` — described in D15 as "a tunnel that is already authenticated and encrypted by the Kubernetes API server." There is no VPN/Bastion/peered network from the operator's own machine into the AKS VNet, so a literal interactive session in an ordinary browser isn't possible here. What follows exercises the same Gateway → HTTPRoute → Service → Pod path a browser's fetch calls would take, via `curl` with the routing Host headers, over that same port-forward tunnel. Recorded as the intended access path per design, not as a workaround or a gap.
+
+Commands run in Azure Cloud Shell, current Cycle 2 cluster.
+
+Locating the Gateway's actual Service (the add-on's Envoy proxy):
+```
+$ kubectl get gateway travel-agent-gateway -o wide
+NAME                   CLASS              ADDRESS      PROGRAMMED   AGE
+travel-agent-gateway   approuting-istio   10.224.0.6   True         3h46m
+
+$ kubectl get svc -A | grep -i istio
+aks-istio-system   istiod                                  ClusterIP      10.0.69.24     <none>        15010/TCP,15012/TCP,443/TCP,15014/TCP   4h13m
+default            travel-agent-gateway-approuting-istio   LoadBalancer   10.0.92.127    10.224.0.6    15021:30870/TCP,80:31061/TCP            3h46m
+```
+
+Port-forward to that Service and confirm both hostnames route correctly:
+```
+$ kubectl port-forward -n default svc/travel-agent-gateway-approuting-istio 8080:80 &
+Forwarding from [::1]:8080 -> 80
+
+$ curl -s -o /dev/null -w "frontend HTTP status: %{http_code}\n" -H "Host: travel-agent.internal" http://localhost:8080/
+frontend HTTP status: 200
+
+$ curl -s -X POST -H "Host: api.travel-agent.internal" -H "Content-Type: application/json" \
+    http://localhost:8080/chat -d '{"message":"What is the weather in Paris?"}'
+{"intent":"weather","response":"Currently, the weather in Paris is a very pleasant 22.9°C (approximately 73°F)... [full multi-paragraph LLM response, citing Météo-France and The Weather Channel]"}
+
+$ curl -s -X POST -H "Host: api.travel-agent.internal" -H "Content-Type: application/json" \
+    http://localhost:8080/chat -d '{"message":"how to go to Rome from Seoul"}'
+Handling connection for 8080
+{"intent":"transportation","response":"Traveling from Seoul, South Korea, to Rome, Italy, is most efficiently done by air. The primary route connects Seoul Incheon International Airport (ICN) with Rome Leonardo da Vinci–Fiumicino Airport (FCO).\n\n**Direct Flights**\nFor the fastest journey, you can book direct flights operated by major South Korean carriers, including [Korean Air](https://www.koreanair.com) and [Asiana Airlines](https://flyasiana.com). These non-stop flights typically take around 12 to 14 hours, offering the most convenient and comfortable travel experience.\n\n**Connecting Flights**\nIf you are looking for budget-friendly options or alternative schedules, several airlines offer one-stop connecting flights. Popular carriers include Qatar Airways (with a layover in Doha), Emirates (with a layover in Dubai), and Lufthansa (with a layover in Munich or Frankfurt). Depending on the layover duration, these flights can take anywhere from 15 to 22 hours. \n\n**Booking Tips**\nTo secure the best deals, it is highly recommended to book at least two to three months in advance. You can compare prices, layover times, and schedules using flight comparison platforms like [Skyscanner](https://www.skyscanner.com) or [Google Flights](https://www.google.com/travel/flights)."}
+```
+
+| Request | Host header | Result |
+|---|---|---|
+| `GET /` | `travel-agent.internal` | HTTP 200 |
+| `POST /chat` (weather) | `api.travel-agent.internal` | Real, LLM-generated `weather`-intent response |
+| `POST /chat` (transportation) | `api.travel-agent.internal` | Real, LLM-generated `transportation`-intent response |
+
+Frontend returned HTTP 200 for `travel-agent.internal`; backend returned two real, LLM-generated responses for `api.travel-agent.internal` — a `weather`-intent question (Paris) and a `transportation`-intent question (Seoul to Rome), independent from task 9.2's Tokyo measurement and from each other, confirming the backend served each specific request through the Gateway/HTTPRoute path rather than a cached or reused result, and that intent classification and routing both hold across a second, different intent on this same tunnel. All requests went to the same Service (`travel-agent-gateway-approuting-istio`) routed by hostname — this is the Gateway and HTTPRoute actually doing the routing (task 9.5's concern), exercised here as a byproduct; task 9.5 still separately confirms routing and that neither Service is individually reachable from outside the cluster.
