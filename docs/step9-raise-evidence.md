@@ -827,3 +827,28 @@ Verified in Explore, against the new datasource:
 - `sum(rate(container_cpu_usage_seconds_total{job="cadvisor"}[5m])) by (pod)` — live, moving CPU-usage data broken out by real AKS pod names (`travel-agent-gateway-approuting-istio`, `coredns`, `konnectivity-agent`, `metrics-server`, `ama-metrics-*`, `azure-cns-*`) — confirms real cluster telemetry, not a static series.
 
 Existing local `Prometheus` datasource (`prometheus:9090`), its provisioning file, and its history are unchanged — both datasources coexist in the Data sources list.
+
+**Task 9.12 — Ingestion volume.**
+
+This replaces `design.md` D8's cost figure, which is arithmetic over two assumed inputs (scrape interval, series count) — this is the measurement D8 itself names as what would settle it.
+
+```
+$ az monitor metrics list \
+  --resource /subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourcegroups/travel-agent-cluster/providers/microsoft.monitor/accounts/travel-agent-metrics \
+  --metric ActiveTimeSeriesPercentUtilization EventsPerMinuteIngestedPercentUtilization \
+  --aggregation Average Maximum \
+  --interval PT5M \
+  -o table
+```
+
+Representative slice of the output, 12 five-minute buckets (2026-09-19T14:00Z–14:55Z):
+- `ActiveTimeSeriesPercentUtilization` — flat at 0.7494–0.7495% for the entire window.
+- `EventsPerMinuteIngestedPercentUtilization` — Average 1.3688–1.4889%, Maximum 1.5291–1.8818%.
+
+Against Azure's default workspace limits — 1,000,000 active time series and 1,000,000 events ingested per minute ([Azure Monitor service limits](https://learn.microsoft.com/en-us/azure/azure-monitor/service-limits), "Prometheus metrics" → "Ingestion", page dated 2025-12-17) — this session measured:
+- Active time series ≈ 7,494–7,495.
+- Events (samples) ingested per minute ≈ 13,700–14,900 average, up to ≈ 18,818 peak.
+
+**Scrape-interval cross-check.** At a 30-second scrape interval (2 scrapes/min), 7,494 series × 2 ≈ 14,988 samples/min — closely matching the measured ~13,700–14,900/min average. This corroborates D8's previously-unverified 30-second scrape-interval assumption, not just the series count.
+
+Both are real, workspace-reported figures for this session, replacing D8's assumed 30-second-interval/1,000-series estimate.
