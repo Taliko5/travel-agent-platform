@@ -803,3 +803,17 @@ $ git diff --stat ce4f8cd c127b2f
 ```
 
 `ci.yml`'s `push` job has no path gating, so this still triggered a full rebuild and `helm upgrade --install` — driven only by the new commit SHA, even though nothing but this evidence file changed.
+
+**Task 9.10 — Metrics.**
+
+`az account get-access-token --resource https://prometheus.monitor.azure.com` failed (MSI doesn't support that token audience in Cloud Shell), and the suggested `az login --scope` device-code workaround also failed to complete — so these three queries were instead run via the Azure Portal's Monitor workspace (`travel-agent-metrics`) → Managed Prometheus → Prometheus explorer blade, using the Portal's own authenticated session.
+
+Three queries, each scoped to `namespace="default"`, `container=~"backend|frontend"`, range last 4 hours:
+
+1. `rate(container_cpu_usage_seconds_total{namespace="default",container=~"backend|frontend"}[5m])` — 3 series returned (2 backend, 1 frontend — the two backend series consistent with the original and replacement backend pods from task 9.7's pod-deletion test); backend shows a usage spike around 14:00–15:00.
+
+2. `container_memory_working_set_bytes{namespace="default",container=~"backend|frontend"}` — current values: backend 145,862,948.57 bytes and 150,548,480 bytes (two series), frontend 71,741,272.82 bytes; backend steps up from ~45M to ~150M around 14:00, frontend rises gradually.
+
+3. `container_cpu_cfs_throttled_periods_total{namespace="default",container=~"backend|frontend"}` — current values: frontend 31.39, backend 35.17 and 35 (two series); step-increase pattern consistent with a cumulative counter.
+
+All three queries returned real, non-zero data scoped to the deployed containers, confirming managed Prometheus is actively collecting cAdvisor metrics for the running backend/frontend pods per `design.md` D8.

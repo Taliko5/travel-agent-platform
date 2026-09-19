@@ -5,7 +5,7 @@ These change what gets written. Each is a documentation read, not a cloud operat
 - [x] 1.1 Read [CSI driver configuration options: Sync mounted content with a Kubernetes secret](https://learn.microsoft.com/en-us/azure/aks/csi-secrets-store-configuration-options) — confirmed: the synced Kubernetes Secret is materialised only once a pod mounts the CSI volume, and is deleted again when the last consuming pod is removed. Recorded in `design.md` D5 with citation, replacing the "not verified" paragraph; the backend Deployment's `csi` volume mount carries the one-line comment `CLAUDE.md` allows for this mechanical constraint.
 - [x] 1.2 Read [Key Vault soft-delete overview](https://learn.microsoft.com/en-us/azure/key-vault/general/soft-delete-overview) — confirmed: a soft-deleted vault's name can't be reused until its retention period expires, configurable 7–90 days at creation, 90 by default. Recorded in `design.md` D10 with citation, replacing the "not verified" sentence; noted there that this design sets no retention period explicitly, so the vault gets the 90-day default unless a task below states otherwise.
 - [x] 1.3 Decided: the metrics workspace is defined in the cluster resource group, alongside items 1–8, and is destroyed with the cluster on every teardown (`design.md` D10). This is interim — D10 records the trigger that moves it to the platform resource group later — and needs no further action here beyond building Section 5 against it.
-- [x] 1.4 Confirmed. Built `frontend/` with `NEXT_PUBLIC_API_URL=http://build-time-marker.example:8111` (a value chosen not to collide with anything else) — it was inlined into `.next/static/chunks/app/page-*.js` and `.next/server/app/page.js`. Started that same build with `next start` under a *different* runtime value, `NEXT_PUBLIC_API_URL=http://runtime-marker.example:9222` (mirroring what `docker-compose.yaml`'s `environment:` entry does — set a value only the running container's process sees, after the build already happened). The served JS chunk still contained only `build-time-marker.example`; `runtime-marker.example` appeared nowhere in the served page or chunk. The compose entry is inert, as D1 reasoned; the claim is not wrong, so D1's build-argument decision (Section 2.3) stands unchanged. `frontend/.next/` is gitignored — no tracked file changed (`git status --short` clean).
+- [x] 1.4 Confirmed. Built `frontend/` with `NEXT_PUBLIC_API_URL=http://build-time-marker.example:8111` (a value chosen not to collide with anything else) — it was inlined into `.next/static/chunks/app/page-*.js` and `.next/server/app/page.js`. Started that same build with `next start` under a _different_ runtime value, `NEXT_PUBLIC_API_URL=http://runtime-marker.example:9222` (mirroring what `docker-compose.yaml`'s `environment:` entry does — set a value only the running container's process sees, after the build already happened). The served JS chunk still contained only `build-time-marker.example`; `runtime-marker.example` appeared nowhere in the served page or chunk. The compose entry is inert, as D1 reasoned; the claim is not wrong, so D1's build-argument decision (Section 2.3) stands unchanged. `frontend/.next/` is gitignored — no tracked file changed (`git status --short` clean).
 
 ## 2. Application Changes
 
@@ -13,27 +13,26 @@ These change what gets written. Each is a documentation read, not a cloud operat
 - [x] 2.2 Added `TestCORS.test_configured_origin_is_used_when_env_var_set` to `backend/tests/test_api_main.py`. It calls the real `_cors_allowed_origins()` against a fresh throwaway `FastAPI`/`TestClient` rather than `api.main`'s already-built module-level `app` — reloading `api.main` to pick up a changed env var would re-run its OTel provider setup for no reason this test needs. The two existing CORS cases are unmodified and still pass.
 - [x] 2.3 `frontend/Dockerfile` gained `ARG NEXT_PUBLIC_API_URL=http://localhost:8000` and `ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL` before `RUN npm run build`, matching today's inlined-fallback value exactly, so a `docker build` with no `--build-arg` produces today's image.
 - [x] 2.4 Run and recorded:
-      ```
-      $ cd backend && pytest tests/ -v
-      ======================== 78 passed, 1 warning in 4.53s ========================
-      $ ruff check backend/
-      All checks passed!
-      $ ruff format --check backend/
-      26 files already formatted
-      $ cd frontend && npm test
-      Test Files  6 passed (6)
-           Tests  21 passed (21)
-      $ npm run lint
-      ✔ No ESLint warnings or errors
-      ```
+      `     $ cd backend && pytest tests/ -v
+    ======================== 78 passed, 1 warning in 4.53s ========================
+    $ ruff check backend/
+    All checks passed!
+    $ ruff format --check backend/
+    26 files already formatted
+    $ cd frontend && npm test
+    Test Files  6 passed (6)
+         Tests  21 passed (21)
+    $ npm run lint
+    ✔ No ESLint warnings or errors
+    `
       All five pass. (The pytest run's trailing `--- Logging error ---`/`I/O operation on closed file` traceback is the console `BatchSpanProcessor`'s background export thread writing after interpreter shutdown, printed after "78 passed" — pre-existing and unrelated to this change, not a test failure.)
 - [x] 2.5 Ran `docker-compose up --build -d`. All four services reached `healthy`/`Up` with no config other than this repository's own files — no `CORS_ALLOWED_ORIGINS` or overriding `NEXT_PUBLIC_API_URL` set anywhere:
       ```
       $ docker-compose ps
-      backend      Up (healthy)   127.0.0.1:8000->8000/tcp
-      frontend     Up             127.0.0.1:3000->3000/tcp
-      grafana      Up (healthy)   127.0.0.1:3001->3000/tcp
-      prometheus   Up (healthy)   127.0.0.1:9090->9090/tcp
+      backend Up (healthy) 127.0.0.1:8000->8000/tcp
+      frontend Up 127.0.0.1:3000->3000/tcp
+      grafana Up (healthy) 127.0.0.1:3001->3000/tcp
+      prometheus Up (healthy) 127.0.0.1:9090->9090/tcp
 
       $ docker-compose exec -T backend env | grep -i cors
       (CORS_ALLOWED_ORIGINS not set — default path is active)
@@ -63,16 +62,15 @@ Lands at `Infrastructure/helm/travel-agent/` (D13). `Infrastructure/k8s/`'s two 
 - [x] 3.5 `templates/backend-serviceaccount.yaml` added, annotated `azure.workload.identity/client-id` from `values.yaml`. The backend Deployment's pod template gained `serviceAccountName` and the `azure.workload.identity/use: "true"` label (D5).
 - [x] 3.6 `templates/secretproviderclass.yaml` added: `secretObjects` syncs the vault's `google-api-key` into the `travel-agent-secrets` Kubernetes Secret the existing `secretKeyRef` already reads; `parameters` use the Workload ID access mode (`usePodIdentity: "false"`, `clientID` from values, no `useVMManagedIdentity`). The backend Deployment gained the CSI `volumeMounts`/`volumes` block task 1.1 established is required, with that task's one-line comment carried onto the mount (D5).
 - [x] 3.7 `templates/gateway.yaml` and `httproute.yaml` added (D2): one `Gateway` with two named listeners (frontend/backend), each with its own `HTTPRoute` by hostname. `gatewayClassName` and `spec.infrastructure.annotations` are the only fields sourced from `values.yaml`'s `gateway.*` — everything else (`apiVersion`, `kind`, `listeners`, `parentRefs`, `hostnames`, `backendRefs`) is upstream Gateway API.
-- [x] 3.8 Satisfied by 3.7's default: `values.yaml`'s `gateway.internalAnnotations` sets `service.beta.kubernetes.io/azure-load-balancer-internal: "true"` as the *default*, not an opt-in, so a plain render has no public address without anyone remembering to ask for one.
+- [x] 3.8 Satisfied by 3.7's default: `values.yaml`'s `gateway.internalAnnotations` sets `service.beta.kubernetes.io/azure-load-balancer-internal: "true"` as the _default_, not an opt-in, so a plain render has no public address without anyone remembering to ask for one.
 - [x] 3.9 `templates/chroma-pvc.yaml` (a `ReadWriteOnce` PVC) added per 3.10's decision (D11). Originally paired with `templates/rag-ingest-job.yaml`, a `pre-install,pre-upgrade` Helm hook Job running `python rag/ingest.py` against that PVC — superseded 2026-09-16 per `Claude outputs/CODE-REVIEW-2026-09-15.md` finding 2.1: that hook required the ServiceAccount, `SecretProviderClass` and PVC it depends on to already exist, but all three are non-hook resources in this same chart's first install, so a fresh `helm install` always failed. Ingestion is now an `initContainer` on `backend-deployment.yaml`; see design.md D11 for the full reasoning.
 - [x] 3.10 Decided and recorded in `design.md` D11: a single-replica `ReadWriteOnce` PVC, not a standalone Chroma server. One backend replica removes the reason a server was proposed for ("multi-replica pods can't share a named volume"), and a server would touch `backend/rag/retriever.py` — this step's Impact line names only two application-code changes (CORS, frontend build arg), and this isn't a third. Ingestion runs as an `initContainer` on the backend Deployment rather than a Helm hook Job or an operator command — see design.md D11 (updated 2026-09-16) for why the original hook design didn't work and what changed. Open Questions' "Chroma server mode versus single-replica PVC" bullet removed.
 - [x] 3.11 `Infrastructure/k8s/` deleted (`rm -r`). `docs/step5.md` and `docs/plan.md`'s path references to it are untouched, per `proposal.md`'s Non-Goals.
 - [x] 3.12 Rendered and dry-run validated. Re-validated 2026-09-16, after the finding-2.1 fix (the Helm hook Job replaced by an `initContainer` on `backend-deployment.yaml`), with `helm lint`/`helm template` only:
-      ```
-      $ helm lint Infrastructure/helm/travel-agent -f Infrastructure/helm/travel-agent/values-example.yaml
-      [INFO] Chart.yaml: icon is recommended
-      1 chart(s) linted, 0 chart(s) failed
-      ```
+      `     $ helm lint Infrastructure/helm/travel-agent -f Infrastructure/helm/travel-agent/values-example.yaml
+    [INFO] Chart.yaml: icon is recommended
+    1 chart(s) linted, 0 chart(s) failed
+    `
       `helm template` now renders 10 top-level objects, one fewer than the 11 in the historical record below — `templates/rag-ingest-job.yaml`'s `Job` no longer exists as a separate rendered object; its function is inside `deployment.apps/travel-agent-backend`'s `initContainer` now: `serviceaccount/travel-agent-backend`, `persistentvolumeclaim/travel-agent-chroma-db`, `service/travel-agent-backend`, `service/travel-agent-frontend`, `deployment.apps/travel-agent-backend`, `deployment.apps/travel-agent-frontend`, `gateway.gateway.networking.k8s.io/travel-agent-gateway`, `httproute.gateway.networking.k8s.io/travel-agent-frontend`, `httproute.gateway.networking.k8s.io/travel-agent-backend`, `secretproviderclass.secrets-store.csi.x-k8s.io/travel-agent-secrets-spc`. The CRD-aware `kubectl apply --dry-run=client` validation below is **not** re-run in this pass — Section 8 is about to apply a real cluster (task 8.8), which validates all of this for real, and spinning up a throwaway `kind` cluster again to re-confirm CRD recognition on a chart whose CRD-relevant objects (`Gateway`, `HTTPRoute`, `SecretProviderClass`) this fix didn't touch adds little.
 
       **Historical record — the original CRD-aware dry-run validation, before the finding-2.1 fix. Kept for reference, not current evidence:**
@@ -96,6 +94,7 @@ Lands at `Infrastructure/helm/travel-agent/` (D13). `Infrastructure/k8s/`'s two 
       $ kind delete cluster --name chart-lint
       ```
       At the time, all 11 rendered objects validated this way, both with the example overrides and with bare `values.yaml` defaults (re-run, same 11 lines) — the `job.batch/travel-agent-rag-ingest` line above is one of those 11 and no longer exists in the chart; see the current re-validation above instead.
+
 - [x] 3.13 Read the rendered `Gateway`/`HTTPRoute` against a port to EKS: exactly two things change — `spec.gatewayClassName` (currently `approuting-istio`) and the contents of `spec.infrastructure.annotations` (Azure's `service.beta.kubernetes.io/azure-load-balancer-internal` swapped for AWS's load-balancer-controller equivalent). Both are already `values.yaml` fields (`gateway.className`, `gateway.internalAnnotations`), so the port needs a new values file, not a template edit. `apiVersion`, `kind`, `listeners`, `parentRefs`, `sectionName`, `hostnames`, `backendRefs` are unchanged — no provider detail leaked into the routing rules.
 
 ## 4. Infrastructure Definitions — Platform State
@@ -179,7 +178,7 @@ Each task's output is a measurement, quoted into the evidence file. A task that 
 - [x] 9.7 **Corpus availability.** Ask a retrieval-grounded question and record the answer. Delete the serving pod, wait for its replacement, ask the same question, and record that answer. They must match, with no operator action in between. Same RAG-grounded question asked before and after deleting the backend pod (new pod, different name); the six distinctive facts in both answers match exactly, though wording differs (no `temperature=0` set on the model, so exact phrasing isn't expected to match) — the PVC-backed, idempotent-skip ingest (`backend/rag/ingest.py`) held the corpus identical across the replacement. Full record: `docs/step9-raise-evidence.md`.
 - [x] 9.8 **Reproducibility.** Record every command run between task 8.1 and here that was not already written in the repository. The spec requires that set to be empty except for supplying the secret value; anything else in it is a defect to fix in Sections 3–6, not an observation to file. Reviewed every command run task 8.1 through 9.7; the only command not already written in the repository is task 8.3's `az keyvault secret set` supplying the secret value (one-time across the whole sequence per 7.5.3, since the platform state persists across cycles); everything else matches `Infrastructure/terraform/*/README.md`'s documented apply sequences, tasks.md's own documented CI-variable steps, or was a read-only measurement/verification command; no defect found. Full record: `docs/step9-raise-evidence.md`.
 - [x] 9.9 **Parameterisation.** Deploy a second commit and record that nothing changed but the supplied values — no tracked file edited, no rendered manifest committed. Satisfied retrospectively by two consecutive real deploys already on `main` (`ce4f8cd` → `c127b2f`, the currently-running deploy tested throughout this cycle) — zero diff in `Infrastructure/helm/` between them, no rendered manifest committed anywhere in the repo, and `ci.yml`'s `push` job has no path gating so it ran a full rebuild+push+`helm upgrade --install` for `c127b2f` even though that commit only touched `docs/step9-raise-evidence.md`. Full record: `docs/step9-raise-evidence.md`.
-- [ ] 9.10 **Metrics.** Query container CPU, memory working set and CPU throttling per application container from the workspace. Record the queries and their results.
+- [x] 9.10 **Metrics.** Query container CPU, memory working set and CPU throttling per application container from the workspace. Record the queries and their results. Ran all three PromQL queries against the managed Prometheus workspace via the Portal's Prometheus explorer (CLI access blocked — Cloud Shell's MSI doesn't support the `https://prometheus.monitor.azure.com` token audience); real non-zero CPU, memory and throttling data returned for both backend and frontend containers. Full record: `docs/step9-raise-evidence.md`.
 - [ ] 9.11 **Grafana datasource.** Add the workspace as a second datasource on the existing local Grafana and confirm it queries. Record that the existing Prometheus datasource and its history are untouched.
 - [ ] 9.12 **Ingestion volume.** Read the workspace's own ingestion metric for the session and record it. `design.md` D8's cost figure is arithmetic over two assumed inputs; this measurement replaces it, and per `CLAUDE.md` it then lives in one place and is pointed at.
 - [ ] 9.13 **Local history untouched.** Confirm `prometheus_data` was neither read from, written to, nor deleted by any step in Sections 8 or 9.
@@ -197,7 +196,7 @@ Each task's output is a measurement, quoted into the evidence file. A task that 
 
 ## 11. Record
 
-Two different things get written here, to two different homes, and neither is `tasks.md` itself once this change archives. The observations go to `docs/`, following the precedent `docs/step8-9d-evidence.md` sets — that stays true. The raise/teardown *procedure* does not stay in this file: `openspec/config.yaml` governs `docs/` against `openspec/`, and both live under a change directory that moves to `openspec/changes/archive/` on archiving, same as `design.md`'s pointers and `docs/step8.md`'s scope note did. `README.md` is this repository's only permanent operator-facing document and is not governed by that split, so it is where a runbook that has to survive archiving belongs.
+Two different things get written here, to two different homes, and neither is `tasks.md` itself once this change archives. The observations go to `docs/`, following the precedent `docs/step8-9d-evidence.md` sets — that stays true. The raise/teardown _procedure_ does not stay in this file: `openspec/config.yaml` governs `docs/` against `openspec/`, and both live under a change directory that moves to `openspec/changes/archive/` on archiving, same as `design.md`'s pointers and `docs/step8.md`'s scope note did. `README.md` is this repository's only permanent operator-facing document and is not governed by that split, so it is where a runbook that has to survive archiving belongs.
 
 - [ ] 11.1 Complete `docs/step9-raise-evidence.md` from the material recorded during Sections 8, 9 and 10. Commands and their output, not summaries. State the commit and the cluster version the run was made against.
 - [ ] 11.2 In that file, state which previously-unverified claims this run settled and what each measured: the pool's actual fit, the region's available versions, the CSI sync's volume requirement, the node OS disk default, and whether a 2-vCPU system pool is refused in practice.
@@ -205,7 +204,7 @@ Two different things get written here, to two different homes, and neither is `t
 - [ ] 11.4 Update the affected `design.md` decisions to point at the measurement rather than restating it — D8's estimated ingestion figure and D14's capacity argument in particular. Each measurement lives in exactly one place.
 - [ ] 11.5 Add `docs/step9-raise-evidence.md` to `CLAUDE.md`'s Docs section, following the existing one-line entries.
 - [ ] 11.6 Add a "Deploying to Azure (Step 9)" section to `README.md` documenting the raise procedure as an operator runbook — apply the platform state, set the secret value, apply the cluster state, deploy the chart — in imperative steps matching the style of the README's existing "Running Locally" section, referencing this file's Sections 4, 5, 7 and 8 rather than restating their content.
-- [ ] 11.7 In that section, document how to rotate `GOOGLE_API_KEY`: setting a new value with `az keyvault secret set` updates the vault, the CSI mount and the synced Kubernetes Secret, but not a running container's environment — Kubernetes populates env vars from a Secret once, at container start, and does not hot-reload them. The rotation is not complete until the backend pod is restarted (`kubectl rollout restart deployment/<backend>`), and that restart step is the one an operator is most likely to forget precisely because everything else about rotation *is* automatic (`design.md` D5).
+- [ ] 11.7 In that section, document how to rotate `GOOGLE_API_KEY`: setting a new value with `az keyvault secret set` updates the vault, the CSI mount and the synced Kubernetes Secret, but not a running container's environment — Kubernetes populates env vars from a Secret once, at container start, and does not hot-reload them. The rotation is not complete until the backend pod is restarted (`kubectl rollout restart deployment/<backend>`), and that restart step is the one an operator is most likely to forget precisely because everything else about rotation _is_ automatic (`design.md` D5).
 - [ ] 11.8 In that section, document the teardown command, and immediately beside it — not in a separate paragraph an operator could miss — state explicitly that teardown has no relationship to `docker-compose down -v`, which destroys `prometheus_data` and cannot be regenerated.
 - [ ] 11.9 In that section, document what teardown destroys, what survives it, and the standing cost of what survives, pointing at `design.md`'s inventory for the figure rather than restating it (`CLAUDE.md`: never restate figures).
 - [ ] 11.10 Confirm no step written anywhere in this change, including the new `README.md` section, instructs a client to disable certificate verification, and that the README's access instructions name the authenticated tunnel rather than a plaintext address someone could reuse from elsewhere.
