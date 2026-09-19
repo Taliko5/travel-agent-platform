@@ -716,4 +716,24 @@ travel-agent-frontend   ClusterIP   10.0.240.111   <none>        80/TCP    3h59m
 | `travel-agent-backend` | ClusterIP | 10.0.53.21 | `<none>` |
 | `travel-agent-frontend` | ClusterIP | 10.0.240.111 | `<none>` |
 
-Both routes are cleanly accepted and resolved by the Gateway's controller (`istio.aks.azure.com/gateway-controller`), each bound to its own Gateway listener section (`frontend`/`backend`) and backing the matching Service on port 80 — this is the control-plane half of "requests reach both services through the `Gateway` and `HTTPRoute`"; the data-plane half (that traffic actually flows and gets a real response through this exact path) is task 9.4's already-recorded curl results, not repeated here. Both Services being ClusterIP with no EXTERNAL-IP means there is no network path to either Service from outside the cluster at all except through the Gateway (or an already-authenticated `kubectl` tunnel, which is D2/D15's designed operator access path, not "outside the cluster" reachability in the sense this task means) — no LoadBalancer, no NodePort, nothing an external client without cluster credentials could hit directly.
+Both routes are accepted and resolved by the Gateway's controller (`istio.aks.azure.com/gateway-controller`) — the control-plane half of the routing requirement; the data-plane half (real responses through this exact path) is task 9.4's already-recorded curl results. Both Services being ClusterIP with no EXTERNAL-IP means there's no path to either from outside the cluster except through the Gateway or an authenticated `kubectl` tunnel (D2/D15's designed access path) — no LoadBalancer, no NodePort.
+
+**Task 9.6 — The entry point is internal.**
+
+The Gateway's own address is task 9.4's already-recorded `kubectl get gateway`/`get svc` output, not repeated here — a private VNet IP, not a public one. This task's own new measurement is proving the one public IP that does exist in the node resource group belongs to something else entirely, not the Gateway.
+
+```
+$ NODE_RG=$(az aks show --resource-group travel-agent-cluster --name travel-agent --query nodeResourceGroup -o tsv)
+$ echo "$NODE_RG"
+MC_travel-agent-cluster_travel-agent_germanywestcentral
+
+$ az network public-ip list -g "$NODE_RG" -o table
+Name                                  ResourceGroup                                             Location             Zones    Address       IdleTimeoutInMinutes    ProvisioningState
+------------------------------------  --------------------------------------------------------  -------------------  -------  ------------  ----------------------  -------------------
+a71a91bb-82e3-4d00-9b36-097d91bcfc8e  MC_travel-agent-cluster_travel-agent_germanywestcentral   germanywestcentral  231      4.182.97.209  4                       Succeeded
+
+$ az network public-ip show -g "$NODE_RG" -n a71a91bb-82e3-4d00-9b36-097d91bcfc8e --query "ipConfiguration.id" -o tsv
+/subscriptions/<redacted>/resourceGroups/MC_travel-agent-cluster_travel-agent_germanywestcentral/providers/Microsoft.Network/loadBalancers/kubernetes/frontendIPConfigurations/a71a91bb-82e3-4d00-9b36-097d91bcfc8e
+```
+
+Exactly one public IP exists in the node resource group, attached to `loadBalancers/kubernetes` — the AKS-managed outbound LB (SNAT/egress), already accounted for in `design.md`'s cost inventory as non-inbound — not to the Gateway's own (istio-provisioned) LB. Combined with task 9.4's already-recorded Gateway address (private VNet IP), the entry point has no public address anywhere. The only access path is `kubectl port-forward`, per `design.md` D2/D15 — already demonstrated in task 9.4.
