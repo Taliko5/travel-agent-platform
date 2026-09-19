@@ -573,3 +573,64 @@ $ git grep -nE '^kind:\s*Secret\b' -- Infrastructure/
 (no standalone Secret manifest)
 ```
   the only references to `travel-agent-secrets` are the two `secretKeyRef` reads in `backend-deployment.yaml` and the default in `values.yaml`, so the mount is what produces the Secret the `secretKeyRef` reads. On this freshly rebuilt cluster the Secret is present with no manual creation step in the deploy path, i.e. it was produced by the CSI sync during the current cluster's life. This confirms D5's [Risk] item (the mount is present and the mount-driven sync is in effect); the stronger claim that removing the mount breaks delivery rests on D5's documented behaviour and was not separately re-tested.
+
+**Task 9.3 — Secret containment.**
+
+**(1) Repository search, HEAD + full history:**
+```
+$ git grep -nE 'AIza[0-9A-Za-z_-]{35}' $(git rev-parse HEAD) -- .
+(no output, no match)
+$ git log --all -p -S'AIza' --oneline
+(no output, no match)
+```
+Only `*.env.example` files are tracked (`backend/.env.example`, `frontend/.env.local.example`, `observability/grafana/.env.example`), placeholders only. Real `.env` files confirmed gitignored:
+```
+$ git check-ignore -v frontend/.env.local backend/.env observability/grafana/.env
+.gitignore:49:.env*.local    frontend/.env.local
+.gitignore:8:backend/.env    backend/.env
+.gitignore:50:observability/grafana/.env    observability/grafana/.env
+```
+
+**(2) Both Terraform state files**, run in Azure Cloud Shell (state is local per `design.md` D10):
+```
+$ cd Infrastructure/terraform/platform && grep -oE 'AIza[0-9A-Za-z_-]{35}' terraform.tfstate; echo "platform state: exit=$?"
+platform state: exit=1
+$ cd Infrastructure/terraform/cluster && grep -oE 'AIza[0-9A-Za-z_-]{35}' terraform.tfstate; echo "cluster state: exit=$?"
+cluster state: exit=1
+```
+
+**(3) Built image layers**, both `travel-agent-backend` and `travel-agent-frontend`, amd64, tag `c127b2fa3e89ed186658274e7468d3b2e286e7c4` (most recent commit with a built image — the newer commits are docs-only, no build triggered by CI's path filter). Run in Azure Cloud Shell against the ACR Distribution REST API directly, since Cloud Shell has no Docker daemon: `az acr login --expose-token` for a refresh token, exchanged per-repository for a scoped access token via `POST https://$ACR_LOGIN_SERVER/oauth2/token`, then each layer blob fetched with `curl -L` and extracted with `tar`. All layer sizes matched the manifest exactly.
+
+| Image | Layers | Sizes (bytes) |
+|---|---|---|
+| backend | 9 | 29830418, 1294116, 11908066, 250, 93, 5072479, 1437, 182508550, 15338 |
+| frontend | 9 | 3849738, 56519242, 1261993, 444, 93, 85901, 351270742, 18361, 25807874 |
+
+```
+$ grep -rloE 'AIza[0-9A-Za-z_-]{35}' /tmp/acr-check/extracted_*    # backend, all 9 layers
+(no output, no match)
+$ grep -rloE 'AIza[0-9A-Za-z_-]{35}' /tmp/acr-check/fextracted_*   # frontend, all 9 layers
+(no output, no match)
+```
+Worth one line: a first attempt without `curl -L` only fetched the registry's small 307-redirect body, not real layer content, and needed the redirect followed; a few files under `var/lib/apt/lists/.wh.*` needed owner-read granted (OCI whiteout markers, restrictive permissions) before the final grep above ran clean.
+
+**(4) CI secrets and variables**, `Taliko5/travel-agent-platform` repo Settings → Secrets and variables → Actions, read via GitHub web UI:
+
+Secrets: none configured.
+
+Variables (8):
+
+| Variable |
+|---|
+| `ACR_LOGIN_SERVER` |
+| `AKS_CLUSTER_NAME` |
+| `AKS_RESOURCE_GROUP_NAME` |
+| `AZURE_CLIENT_ID` |
+| `AZURE_SUBSCRIPTION_ID` |
+| `AZURE_TENANT_ID` |
+| `BACKEND_IDENTITY_CLIENT_ID` |
+| `KEY_VAULT_NAME` |
+
+This is exactly `design.md` D4's 8-identifier inventory (tasks 6.7 + 8.2) — also independently confirms what `tasks.md` 6.7/8.2 themselves flagged as unverified from an environment without `gh` CLI/token.
+
+**Conclusion.** None of the 8 is a credential that would still authenticate if copied out — all are non-secret identifiers (hostname, resource names, tenant/subscription/client IDs), not bearer credentials; both auth paths that matter (`azure/login` for CI, the backend's Key Vault access) go through OIDC/workload-identity federation (D4, D5), whose trust is scoped server-side, so a client ID alone doesn't authenticate outside its federated context. Zero secrets configured at all, consistent with D4/D13's OIDC-only posture.
