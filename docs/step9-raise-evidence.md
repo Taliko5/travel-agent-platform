@@ -914,3 +914,25 @@ $ az role assignment create --assignee f2739b2d-73ba-48c1-a843-8cbfea73cf5f --ro
     --scope /subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourceGroups/travel-agent-platform/providers/Microsoft.KeyVault/vaults/travel-agent-kv-52f2y82s
 ```
 No further `kubectl` action needed — kubelet was already retrying the failed CSI mount on the same stuck pod automatically. Time from restore command to the pod reaching `Running`/`Ready` (1/1): ~1.5 minutes. Per `design.md` D4, this propagation delay is documented behaviour, not a failure — the measurement recorded here is the delay itself, not a defect.
+
+**Tasks 10.1/10.2 — Cycle 2 teardown (2026-09-20), reconfirming Cycle 1's 2026-09-16 result.**
+
+```
+$ terraform destroy \
+    -var="acr_id=$(terraform -chdir=../platform output -raw acr_id)" \
+    -var="ci_identity_principal_id=$(terraform -chdir=../platform output -raw ci_identity_principal_id)" \
+    -var="region=$(terraform -chdir=../platform output -raw region)"
+```
+"Destroy complete! Resources: 11 destroyed." — same count as Cycle 1.
+
+```
+$ az group exists --name travel-agent-cluster
+false
+
+$ az group list --query "[?starts_with(name, 'MC_travel-agent-cluster')]" -o table
+(empty)
+
+$ az resource list --resource-group travel-agent-cluster -o table
+ResourceGroupNotFound
+```
+`ResourceGroupNotFound` is a stronger confirmation than an empty resource list — the cluster resource group is itself one of the 11 destroyed resources (task 7.1's inventory), so there is nothing left for a resource list to even scope against. No per-hour billable resource from the session remains.
