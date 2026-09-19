@@ -867,3 +867,29 @@ $ docker exec <prometheus container> ls -la /prometheus
 On-disk TSDB block directories dated 2026-08-10, 08-22, 09-05, 09-06, 09-07 (×2), and 09-19 (×3, today's compactions) — a continuous, gapless block history, consistent with `observability/prometheus.yml`'s 90-day retention. (`/api/v1/status/tsdb`'s headStats min/maxTime reflect only the current open head block, not full retention, and are deliberately not used as the evidence here.)
 
 Sections 8 and 9's work is entirely against Azure/AKS (`terraform`, `az`, `kubectl`) — neither section has a command path that touches a local Docker volume at all. `prometheus_data` was neither read from, written to, nor deleted by any step in either section.
+
+**Task 9.14 — Nothing history-bearing was placed on the cluster.**
+
+```
+$ kubectl get deployments,statefulsets,daemonsets,pods --all-namespaces
+```
+**Directly observed:** output spans 3 namespaces (`aks-istio-system`, `default`, `kube-system`) with Deployment and DaemonSet tables, but no StatefulSet table appears at all — `kubectl` omits a resource-kind's table entirely when zero match, so this means zero StatefulSets exist anywhere in the cluster.
+
+| Aspect | Finding |
+|---|---|
+| Namespaces | `aks-istio-system`, `default`, `kube-system` |
+| StatefulSets | Zero, anywhere in the cluster |
+| App workloads (Deployment/DaemonSet) | `travel-agent-backend`, `travel-agent-frontend`, `travel-agent-gateway-approuting-istio` |
+| AKS system workloads (Deployment/DaemonSet) | `istiod`, `coredns`, `konnectivity-agent`, `metrics-server`, `azure-cns`, CSI drivers, `kube-proxy`, `retina-agent`, `azure-wi-webhook-controller-manager`, `aks-secrets-store-*`, `ama-metrics`/`ama-metrics-ksm`/`ama-metrics-node`/`ama-metrics-operator-targets` |
+
+**Inference** (not read directly, based on Microsoft's own AKS Prometheus add-on component names — the same page `design.md` D8 already cites): the `kube-system` Deployments/DaemonSets named `ama-metrics`, `ama-metrics-ksm`, `ama-metrics-operator-targets`, and `ama-metrics-node` are the managed-Prometheus collection/forwarding agents, not storage — they forward to the external Azure Monitor workspace, a separate resource with its own lifecycle. None of them own a PVC (below), consistent with holding no local state.
+
+```
+$ kubectl get pvc --all-namespaces
+$ kubectl get pv
+```
+**Directly observed:** exactly one PVC/PV pair in the whole cluster — `default/travel-agent-chroma-db` (1Gi, RWO, Bound).
+
+**Inference** (based on `CLAUDE.md`'s architecture section, `rag/ingest.py` storing embeddings in ChromaDB): this PVC is the RAG vector store — application data, not a metrics-storage or dashboard workload. Named explicitly so it's clear it was seen and considered, not missed; out of scope for this task's specific claim.
+
+**Conclusion:** no StatefulSet, no self-hosted Prometheus/Grafana/Loki-shaped workload, and the cluster's only persistent volume is unrelated to observability. Destroying this cluster destroys no observability history.
