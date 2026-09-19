@@ -852,3 +852,18 @@ Against Azure's default workspace limits — 1,000,000 active time series and 1,
 **Scrape-interval cross-check.** At a 30-second scrape interval (2 scrapes/min), 7,494 series × 2 ≈ 14,988 samples/min — closely matching the measured ~13,700–14,900/min average. This corroborates D8's previously-unverified 30-second scrape-interval assumption, not just the series count.
 
 Both are real, workspace-reported figures for this session, replacing D8's assumed 30-second-interval/1,000-series estimate.
+
+**Task 9.13 — Local history untouched.**
+
+```
+$ docker volume inspect travel-agent-platform_prometheus_data --format '{{.CreatedAt}}'
+2026-07-28T20:10:45+02:00
+```
+Unchanged since before this whole sequence began — `docker-compose down -v` resets this timestamp, and `down -v`/`down --volumes` occurs nowhere in this file or `docs/step8-9d-evidence.md`.
+
+```
+$ docker exec <prometheus container> ls -la /prometheus
+```
+On-disk TSDB block directories dated 2026-08-10, 08-22, 09-05, 09-06, 09-07 (×2), and 09-19 (×3, today's compactions) — a continuous, gapless block history, consistent with `observability/prometheus.yml`'s 90-day retention. (`/api/v1/status/tsdb`'s headStats min/maxTime reflect only the current open head block, not full retention, and are deliberately not used as the evidence here.)
+
+Sections 8 and 9's work is entirely against Azure/AKS (`terraform`, `az`, `kubectl`) — neither section has a command path that touches a local Docker volume at all. `prometheus_data` was neither read from, written to, nor deleted by any step in either section.
