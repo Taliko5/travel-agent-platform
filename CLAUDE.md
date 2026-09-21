@@ -197,3 +197,4 @@ that division workable.
 - `docs/step6.md` — Frontend (Next.js 14 / TypeScript)
 - `docs/step7.md` — GitHub Actions CI/CD
 - `docs/step8.md` — Observability (OpenTelemetry / Prometheus / Grafana)
+- `docs/step9-raise-evidence.md` — Step 9 (AKS deployment) raise/verify/teardown evidence log
