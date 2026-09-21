@@ -998,3 +998,17 @@ travelagentnorik1709               cloud-shell-storage-travel  germanywestcentra
 Subscription-wide, exactly the same 4 resources in `travel-agent-platform` that task 10.3 already recorded (ACR, Key Vault, 2 identities), plus `NetworkWatcher_germanywestcentral` and a Cloud Shell storage account — both outside `design.md`'s inventory and outside this project's own resource groups.
 
 This matches `design.md` D10's standing-cost claim: ACR ≈$5/month, everything else ≈$0.
+
+**Task 10.4 — Pipeline still publishes after teardown.**
+
+Run: https://github.com/Taliko5/travel-agent-platform/actions/runs/35584311566/job/106284127297
+
+The push job's build-and-push-to-ACR steps succeeded. The deploy step failed:
+
+```
+Run az aks get-credentials --resource-group "travel-agent-cluster" --name "travel-agent" --overwrite-existing
+ERROR: (AuthorizationFailed) The client '***' with object id '2785c1f0-588c-438c-9818-63422fd5307d' does not have authorization to perform action 'Microsoft.ContainerService/managedClusters/listClusterUserCredential/action' over scope '/subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourceGroups/travel-agent-cluster/providers/Microsoft.ContainerService/managedClusters/travel-agent' or the scope is invalid. If access was recently granted, please refresh your credentials.
+Error: Process completed with exit code 1.
+```
+
+This is `AuthorizationFailed`, not a resource-not-found error — worth being precise about. `azurerm_role_assignment.ci_aks_cluster_user` / `ci_aks_rbac_cluster_admin` (task 5.9, `design.md` D4) are declared in the cluster Terraform state, the same state Section 10 destroys — so CI's access grant to the cluster resource group was destroyed along with the cluster itself. Azure's control plane does not distinguish "no access" from "doesn't exist" for an unauthorized caller, so the error text alone doesn't prove which — but either way this is a designed consequence of D10, not a CI regression. CI's own identity, federated credential and ACR push permission (platform-state resources, task 4.4) were untouched, which the successful build+push half already demonstrates.
