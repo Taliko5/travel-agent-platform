@@ -48,6 +48,40 @@ docker-compose exec backend python rag/ingest.py   # first-time ingest
 
 Starts both services together: backend on `:8000`, frontend on `:3000`. Requires `GOOGLE_API_KEY` set in `backend/.env` beforehand (docker-compose reads it via `env_file`). Stop with `docker-compose down`.
 
+## Deploying to Azure (Step 9)
+
+The app also runs on AKS (Azure Kubernetes Service), raised and torn down per working session rather than left running. **Before doing any of this, get the cost-approval go-ahead required by `openspec/changes/step9-aks-deployment/tasks.md` Section 7** — Section 8 there is the authoritative step ordering if anything below is ambiguous.
+
+### 1. Raise the cluster
+
+1. Apply the platform Terraform state (registry, Key Vault, CI/backend identities) — see `Infrastructure/terraform/platform/README.md` for the exact command and var flags.
+2. Set the `GOOGLE_API_KEY` secret value directly in Key Vault, out-of-band (not via Terraform) — same README covers this.
+3. Apply the cluster Terraform state (AKS cluster, node pool, Gateway) — see `Infrastructure/terraform/cluster/README.md`.
+4. Re-apply the platform state a second time, now passing the new cluster's OIDC issuer URL — this is what wires the backend's federated identity to the cluster just created. Covered in the same platform README.
+5. Deploy the Helm chart (`Infrastructure/helm/travel-agent/`), either by hand or via the CI pipeline's `push` job on a merge to `main`.
+
+### 2. Rotate `GOOGLE_API_KEY`
+
+`az keyvault secret set` updates the vault, the CSI mount, and the synced Kubernetes Secret automatically. It does **not** update a running container's environment — Kubernetes populates env vars from a Secret once, at container start, and does not hot-reload them. Rotation is not complete until the backend pod is restarted:
+
+```bash
+kubectl rollout restart deployment/travel-agent-backend
+```
+
+This restart is the step most likely to get forgotten, precisely because everything before it happens automatically.
+
+### 3. Tear down
+
+```bash
+terraform destroy
+```
+
+Needs the same `-var` flags as the apply step — see `Infrastructure/terraform/cluster/README.md` for the exact invocation.
+
+This destroys the **cluster** Terraform state only, and has no relationship to `docker-compose down -v` — the latter destroys `prometheus_data`, this repo's irreplaceable local observability history. Never confuse the two.
+
+What survives teardown, what doesn't, and the standing cost of what survives are all in `openspec/changes/step9-aks-deployment/design.md`'s D10 section and its resource inventory — see there for the specifics and figures.
+
 ## Testing, Linting & Formatting
 
 ```bash
