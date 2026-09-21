@@ -948,3 +948,53 @@ All 4 platform resources present, all Status `Succeeded`: `travelagentacr52f2y82
 $ az keyvault secret show --vault-name travel-agent-kv-52f2y82s --name google-api-key --query "{name:name, enabled:attributes.enabled}" -o table
 ```
 `google-api-key`, Enabled: `True` — still readable for the next raise (value not shown, per `CLAUDE.md`).
+
+**Tasks 10.5/10.6 — Local stack untouched; standing cost matches inventory (2026-09-21).**
+
+```
+$ docker volume inspect travel-agent-platform_prometheus_data --format '{{.CreatedAt}}'
+2026-07-28T20:10:45+02:00
+$ docker volume inspect travel-agent-platform_grafana_data --format '{{.CreatedAt}}'
+2026-07-28T20:10:45+02:00
+```
+`prometheus_data` matches task 9.13's existing baseline; `grafana_data`'s `CreatedAt` is recorded here for the first time and carries the same timestamp — consistent with both volumes being created together at the original `docker-compose up` and never recreated since.
+
+```
+$ docker-compose ps
+NAME                                 IMAGE                            COMMAND                  SERVICE      CREATED        STATUS                  PORTS
+travel-agent-platform-backend-1      travel-agent-platform-backend    "uvicorn api.main:ap…"   backend      2 weeks ago    Up 43 hours (healthy)   127.0.0.1:8000->8000/tcp
+travel-agent-platform-frontend-1     travel-agent-platform-frontend   "docker-entrypoint.s…"   frontend     2 weeks ago    Up 43 hours             127.0.0.1:3000->3000/tcp
+travel-agent-platform-grafana-1      grafana/grafana:latest           "/run.sh"                grafana      42 hours ago   Up 42 hours (healthy)   127.0.0.1:3001->3000/tcp
+travel-agent-platform-prometheus-1   prom/prometheus:latest           "/bin/prometheus --c…"   prometheus   2 weeks ago    Up 43 hours (healthy)   127.0.0.1:9090->9090/tcp
+```
+All 4 services `Up`, three reporting `(healthy)`.
+
+Local Grafana still serves the provisioned `travel-agent-overview` dashboard — title matches, `meta.provisioned: true` — but its panel count is now 9, versus 7 recorded in `docs/step8-9d-evidence.md` item 5. The dashboard JSON is bind-mounted from the repo, not stored in the volume, so this is the file's own edit history, not volume loss; not investigated further here.
+
+`down -v`/`down --volumes` occurs nowhere in this file's Section 8–10 command log — confirmed by search, not just by memory of what was run.
+
+```
+$ az group list -o table
+Name                            Location            Status
+------------------------------  ------------------  ---------
+cloud-shell-storage-westeurope  westeurope          Succeeded
+cloud-shell-storage-travel      germanywestcentral  Succeeded
+travel-agent-platform           germanywestcentral  Succeeded
+NetworkWatcherRG                germanywestcentral  Succeeded
+```
+Subscription-wide, only 4 resource groups exist: `travel-agent-platform`, plus `NetworkWatcherRG` and two `cloud-shell-storage-*` groups — Azure/Cloud Shell platform artifacts, unrelated to this project. No `travel-agent-cluster` resource group, no leftover throwaway RG (e.g. task 8.5's probe RG).
+
+```
+$ az resource list -o table
+Name                               ResourceGroup               Location            Type                                              Status
+---------------------------------  --------------------------  ------------------  ------------------------------------------------  ---------
+travelagentacr52f2y82s             travel-agent-platform       germanywestcentral  Microsoft.ContainerRegistry/registries            Succeeded
+travel-agent-backend               travel-agent-platform       germanywestcentral  Microsoft.ManagedIdentity/userAssignedIdentities  Succeeded
+travel-agent-kv-52f2y82s           travel-agent-platform       germanywestcentral  Microsoft.KeyVault/vaults                         Succeeded
+travel-agent-ci                    travel-agent-platform       germanywestcentral  Microsoft.ManagedIdentity/userAssignedIdentities  Succeeded
+NetworkWatcher_germanywestcentral  NetworkWatcherRG            germanywestcentral  Microsoft.Network/networkWatchers                 Succeeded
+travelagentnorik1709               cloud-shell-storage-travel  germanywestcentral  Microsoft.Storage/storageAccounts                 Succeeded
+```
+Subscription-wide, exactly the same 4 resources in `travel-agent-platform` that task 10.3 already recorded (ACR, Key Vault, 2 identities), plus `NetworkWatcher_germanywestcentral` and a Cloud Shell storage account — both outside `design.md`'s inventory and outside this project's own resource groups.
+
+This matches `design.md` D10's standing-cost claim: ACR ≈$5/month, everything else ≈$0.
