@@ -259,6 +259,8 @@ Checked against Microsoft's own docs ([Use Azure RBAC for Kubernetes Authorizati
 
 **Decision (owner approved): grant CI "Azure Kubernetes Service RBAC Cluster Admin" too** — the same role already granted to the operator (above), rather than build a bespoke CRD-scoped custom role right now. `role-assignments.tf`'s `azurerm_role_assignment.ci_aks_rbac_writer` was replaced with `azurerm_role_assignment.ci_aks_rbac_cluster_admin`, same scope and principal. This is a documented, deliberate deviation from the least-privilege posture D4 argues for above — the "Rejected: ... Cluster Admin ..." paragraph's reasoning no longer holds for CI specifically, and is kept only as the historical record of what was assumed before task 8.8's live deploy. **Flagged as a candidate to revisit** with a properly CRD-scoped custom role later, not accepted here as a final answer.
 
+**2026-09-21 (Section 11 closeout).** Still not revisited — CI continues to run as Cluster Admin.
+
 ### D5 — `GOOGLE_API_KEY` comes from Azure Key Vault via the Secrets Store CSI driver, with the pod federated by Workload ID. The plain `secretKeyRef` does not survive (disposable)
 
 What exists today, from `Infrastructure/k8s/backend-deployment.yaml`:
@@ -350,6 +352,8 @@ The honest summary is that ingestion is small relative to $0.48/hour of nodes an
 
 **Mechanism note (task 5.4): `monitor_metrics`'s `annotations_allowed`/`labels_allowed` require an existing workspace.** `cluster.tf`'s `monitor_metrics` block sets both to `"app"` rather than leaving either unset — the provider requires an existing Azure Monitor workspace once both are set, which `monitoring.tf`'s `azurerm_monitor_workspace.this` (task 5.6) supplies. Leaving them unset would enable the add-on with no wiring to a specific workspace, the same gap the DCE/DCR mechanism note below exists to close. Restricting both fields to `"app"`, rather than `""` (collect-everything) or `"*"`, limits which pod annotations/labels get attached to scraped series — but the specific reason `"app"` was chosen over another value was not recorded at the time and is not recoverable from git history (this change landed in a single squashed merge commit, with no incremental log to check). **Open question for the repo owner:** confirm from memory why `"app"` was the value picked.
 
+**2026-09-21 (Section 11 closeout).** Still unresolved — the repo owner has not yet confirmed the reason from memory.
+
 **Mechanism note (task 5.6): the DCE/DCR pair is declared explicitly, not left to the CLI.** `--enable-azure-monitor-metrics` provisions a data collection endpoint, a data collection rule and the association wiring them to the cluster on the operator's behalf; `azurerm_kubernetes_cluster.this`'s `monitor_metrics` block (`cluster.tf`) only turns the add-on on, it does not create or link those three resources, so `cluster/monitoring.tf` declares `azurerm_monitor_data_collection_endpoint.prometheus`, `azurerm_monitor_data_collection_rule.prometheus` and `azurerm_monitor_data_collection_rule_association.prometheus` directly. Their shape mirrors AKS's own auto-provisioned DCE/DCR pair for this scenario; this was not independently verified against Microsoft's ARM template in this pass — task 9.10's ingestion-metric read is what confirms data is actually flowing, the same "not verified, here is what would settle it" convention this section already uses above.
 
 **A provider quirk that only surfaces at apply time.** `azurerm_monitor_data_collection_rule_association` marks `name` optional, but the provider's own documentation states it *"is required when `data_collection_rule_id` is specified. And when `data_collection_endpoint_id` is specified, the `name` is populated with `configurationAccessEndpoint`."* The schema's default is reserved for the DCE-association case, not this DCR-association one, so `terraform validate`/`plan` pass regardless and the failure would only surface at apply time on the very last resource — after the AKS cluster has already taken 10–20 minutes to create. `cluster/monitoring.tf` sets `name = "${var.cluster_name}-dcra"` explicitly rather than relying on the default.
@@ -372,6 +376,8 @@ exit=1
 ```
 
 `"3001:3000"` is Docker Compose's short port syntax with no host-IP part, which publishes on all host interfaces rather than on loopback ([Compose file reference: ports](https://docs.docker.com/reference/compose-file/services/#ports)). And there is no `GF_SECURITY_ADMIN_PASSWORD` anywhere in the file — the grep returns nothing. So Grafana is on `admin`/`admin` and reachable from the local network today, not only after some future deployment exposes it. I have **not** verified this against a running container: `docker compose ps` returned `Cannot connect to the Docker daemon`, so this rests on the file plus Docker's documented default. Per `CLAUDE.md`'s "stop rather than improvise", this is reported and `docs/plan.md` is not edited.
+
+**2026-09-21 (Section 11 closeout).** Still unresolved — not addressed in this pass, consistent with the decision above not to fix a doc nobody asked to have fixed.
 
 **The decision**, so the question is not left open: Grafana's admin password is supplied by `GF_SECURITY_ADMIN_PASSWORD` from the operator's environment with no default value in the repository, and the published port is bound explicitly to `127.0.0.1`.
 
@@ -532,6 +538,6 @@ Sequencing constraint worth stating now: the platform resource group (ACR, Key V
 
 ## Open Questions
 
-- **Which subscription, and whether it has a free-tier credit.** Affects nothing in the design and everything in whether the cost table matters.
+- **Which subscription, and whether it has a free-tier credit.** Affects nothing in the design and everything in whether the cost table matters. Confirmed 2026-09-21: this subscription does have remaining free-tier credit (the balance itself is not recorded here).
 - **Whether `--enable-control-plane-metrics` is worth adding.** It is a separate flag on top of managed Prometheus, collecting API-server and etcd metrics. Extra ingestion for something nobody has asked to see on a cluster that lives for hours; not proposed, flagged so it is a decision rather than an omission.
-- **Node OS disk size and type — settled 2026-09-16.** Not ephemeral (`os_disk_type = "Managed"`), so the disk cost line stays; 128 GiB matches the P10 tier already priced. Full record: `docs/step9-raise-evidence.md`, task 8.7.
+- **Node OS disk size and type — settled 2026-09-16.** Not ephemeral (`os_disk_type = "Managed"`), so the disk cost line stays; 128 GiB matches the P10 tier already priced. Full record: `docs/step9-raise-evidence.md`, task 8.7. The SKU tier itself (Premium SSD vs. Standard SSD) was not independently confirmed against `az disk list` — the node resource group was already destroyed by the time this was noticed, so it can't be checked against the current (torn-down) state. To be checked on the next cluster raise, before teardown — e.g. as part of `docs/plan.md`'s Step 10 work.
