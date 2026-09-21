@@ -2,6 +2,39 @@
 
 AI-powered travel planning agent with production-ready infrastructure.
 
+```mermaid
+flowchart TB
+    subgraph GitHub["GitHub Actions CI/CD"]
+        CI[Build & Test] -->|OIDC, no stored secrets| ACR[Azure Container Registry]
+        CI -->|helm upgrade| AKS
+    end
+
+    subgraph AKS["Azure Kubernetes Service"]
+        GW[Istio Gateway API<br/>internal only, no public IP] --> FE[Frontend<br/>Next.js]
+        GW --> BE[Backend<br/>FastAPI + LangGraph]
+        BE --> RAG[(ChromaDB<br/>RAG store)]
+        BE --> MCP1[MCP: Weather]
+        BE --> MCP2[MCP: Flights]
+        BE --> MCP3[MCP: Hotels]
+        BE -.Workload Identity.-> KV[Azure Key Vault<br/>GOOGLE_API_KEY]
+    end
+
+    Operator[Operator] -->|kubectl port-forward| GW
+    Prometheus[Managed Prometheus] -.scrapes.-> BE
+    Prometheus -.scrapes.-> FE
+```
+
+## What This Repository Demonstrates
+
+- **Zero long-lived cloud credentials** — CI authenticates to Azure via OIDC federation only, no stored secrets
+- **Cost-conscious infrastructure** — the AKS cluster layer is destroyed after every work session; only the platform layer (registry, vault, identities) persists
+- **No public network exposure** — the Gateway has no public IP, verified directly against the Load Balancer's actual IP allocation, not just by configuration intent
+- **Fault-injection tested** — Key Vault access was deliberately revoked mid-session to confirm secret delivery actually depends on Workload Identity, then restored
+- **Stateless resilience** — the backend pod was deleted mid-session and the service recovered with consistent answers
+- **Evidence-driven process** — every verification claim is backed by an actual command's output or a screenshot, not by assertion alone
+
+📖 [Read the full deployment case study](https://taliko5.github.io/travel-agent-platform/) — architecture decisions, trade-offs, and verification evidence from the AKS deployment.
+
 ## Stack
 
 - **Backend:** Python, FastAPI, LangGraph, ChromaDB
@@ -152,6 +185,19 @@ Frontend components are split one-per-concern (rather than a single `ChatInterfa
 | `/health` | GET | `{"status": "ok"}` |
 | `/chat` | POST | `{"message": "..."}` → `{"intent": "...", "response": "..."}` |
 
+## How This Was Built
+
+This project was built with AI assistance (Claude Code and Claude Desktop), using a spec-driven workflow ([OpenSpec](openspec/)) similar to Kiro's. The tools were split by purpose: Claude Desktop for design discussion, trade-off analysis, and reviewing proposals; Claude Code for implementing changes inside the repository. The division of responsibility was deliberate:
+
+- **What I decided:** the roadmap and the scope of each step (`docs/plan.md`), the architecture and tech stack, UI design, cost go/no-go before any billable Azure resource was created, and whether each proposed change was accepted, revised, or rejected.
+- **What the AI did:** drafted proposals, designs, task lists, code, Terraform, and documentation, and ran code reviews. Its review findings were input to my decisions, not a substitute for them.
+- **How changes were checked:** each change was generated one artifact at a time — `proposal.md`, then `design.md`, then `tasks.md`, then any needed `specs/*/spec.md` — and I reviewed and approved each one as the engineer before the next was generated; implementation started only after `tasks.md` was approved. It then had to pass CI's blocking checks (lint, format checks, tests, image builds, gitleaks, Helm dry-run) — Trivy also scans both images but is non-blocking (`exit-code: '0'`), so a finding doesn't fail the build — and infrastructure changes were verified against a real AKS cluster, with the evidence recorded in [`docs/step9-raise-evidence.md`](docs/step9-raise-evidence.md).
+
+Two examples of decisions I made:
+
+- **Deploy only through CI.** Helm releases go out from the GitHub Actions `push` job over OIDC, never from my own machine, so whatever runs in the cluster always corresponds to a commit. That choice is also what exposed a least-privilege gap: creating the chart's CRD objects (`Gateway`, `HTTPRoute`, `SecretProviderClass`) needs a role no built-in Azure role below Cluster Admin provides. I accepted Cluster Admin for CI as a documented, temporary deviation rather than falling back to manual deploys.
+- **Mock MCP servers first.** Commercial flight and hotel APIs are paid, so the flight and hotel MCP servers start with mock data, while weather uses the free Open-Meteo API live. Each tool lives in its own MCP server module behind a fixed function signature, so replacing a mock with a real API later is a change inside that one module, not to the agent graph.
+
 ## Documentation Map
 
 This repo has three separate `.md` systems that serve different purposes — don't confuse them:
@@ -173,5 +219,13 @@ In short: `CLAUDE.md` tells the agent how to work in the repo *right now*, `docs
 - [x] Step 6: Frontend (Next.js 14 / TypeScript)
 - [x] Step 6c: Testing, linting & formatting (frontend + backend)
 - [x] Step 7: GitHub Actions CI/CD
-- [ ] Step 8: Observability (Grafana, Prometheus, OpenTelemetry)
-- [ ] Step 9: AWS deployment (ECS / EKS)
+- [x] Step 8: Observability (Grafana, Prometheus, OpenTelemetry)
+- [x] Step 9: Azure deployment (AKS)
+- [ ] Step 10: CI branch separation + browser-triggered cluster launch
+- [ ] Step 11: Private networking — VNet, private endpoints, Private DNS, TLS
+- [ ] Step 12: IaC quality gates + remote Terraform state
+- [ ] Step 13: Container image and Helm chart hardening
+- [ ] Step 14: Managed data service — PostgreSQL or Blob Storage
+- [ ] Step 15: Port to AWS (EKS)
+
+Details and rationale for each planned step: [`docs/plan.md`](docs/plan.md).
