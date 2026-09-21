@@ -12,8 +12,9 @@
 | 6 | Frontend — Next.js 14 / TypeScript | Done |
 | 7 | GitHub Actions CI/CD | Done |
 | 8 | Observability (Grafana, Prometheus, OpenTelemetry) | Done |
-| 9 | Azure deployment (AKS) | Planned |
-| 10 | Port to AWS (EKS) | Planned |
+| 9 | Azure deployment (AKS) | Done |
+| 10 | CI branch separation + browser-triggered cluster launch | Planned |
+| 11 | Port to AWS (EKS) | Planned |
 
 ---
 
@@ -106,6 +107,8 @@ Stack: OpenTelemetry → FastAPI and LangGraph instrumentation; Prometheus → m
 
 Key metrics: `/chat` latency (p50/p95/p99), intent distribution, LLM call duration, RAG retrieval rate.
 
+**2026-09-21 addendum.** Step 9 redirected this project from AWS to Azure. CloudWatch was never actually wired up as a log sink — structured JSON logging still ships to stdout locally, unchanged. Moving the log destination to an Azure equivalent is unscoped future work, not part of Step 9.
+
 ---
 
 ## Step 9: Azure Deployment (AKS)
@@ -124,12 +127,24 @@ Open questions this step has to settle, before any billable resource is created:
 - Container CPU and memory monitoring, which no orchestrator supplies for free, and what enabling it costs.
 - Grafana's credentials. It still runs on its unchanged default login (`admin`/`admin`, printed in `docs/step8.md`'s "Running Locally"). Harmless only while `docker-compose.yaml` binds its published port to `127.0.0.1`, which that file now states explicitly rather than leaving to Docker's default — an earlier version of this line asserted a loopback binding the file did not actually have, and the claim went unchecked. It stops being harmless the moment anything exposes it past that. Decide the real credential before `grafana` is reachable from anywhere but a developer's own machine.
 
+**2026-09-21 addendum.** The first two questions are settled: `design.md` D7 settles where observability lives, and D8 settles container CPU/memory monitoring and its cost — D8's own cost estimate was itself later replaced by a real measurement, `docs/step9-raise-evidence.md` task 9.12. The third question, Grafana's credentials, was **not** resolved — `design.md` D9 names it explicitly as a contradiction left deliberately unfixed.
+
 Prerequisites: Steps 5 and 7 complete (Docker images, CI). Two pieces of earlier work were written against AWS and need redirecting rather than reusing: the image push job drafted in `docs/step7.md`'s "Step 9 extension" targets ECR, and Step 8's structured JSON logging was justified by CloudWatch's line-oriented ingestion. The logging work itself still stands — the sink changes, the format does not — but the requirement naming CloudWatch lives in `openspec/`, and moving it needs a change of its own rather than an edit here.
 
 ---
 
-## Step 10: Port to AWS (EKS)
+## Step 10: CI Branch Separation & Browser-Triggered Cluster Launch
+
+Two proposals, neither designed or scheduled yet — noted here for later.
+
+**Separate `main` from a `release` branch.** `main` would stay integration-only (tests, build, push images to the registry); merging into `release` is what would trigger the actual `helm upgrade --install` deploy. The current single `push` job conflates "did the code merge cleanly" with "deploy this to whatever cluster happens to be raised right now" — surfaced concretely in `openspec/changes/step9-aks-deployment/tasks.md` task 10.4, where the deploy step failed simply because no cluster was raised at the time, which a merge to `main` alone can't distinguish from an actual regression.
+
+**Trigger a cluster raise/teardown from a browser.** A GitHub Actions `workflow_dispatch` button, or similar, rather than requiring the operator to run Terraform/`az` commands by hand in Cloud Shell every time.
+
+---
+
+## Step 11: Port to AWS (EKS)
 
 Take the Step 9 workload to EKS. The Kubernetes manifests should cross unchanged; the Terraform, the identity model, the registry and the log sink will not.
 
-Deferred on purpose. The value of this step is the port itself — a repository that demonstrates portability instead of asserting it — and a port has nothing to demonstrate until there is a Step 9 to port from.
+Deferred on purpose. The value of this step is the port itself — a repository that demonstrates portability instead of asserting it — and with Step 9 complete, the port is unblocked and ready to be picked up whenever prioritized: still deferred by choice, not by a missing prerequisite.

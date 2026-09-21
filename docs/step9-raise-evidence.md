@@ -6,6 +6,10 @@ anything in Section 8 runs. Section 9's 15 verification tasks may be completed
 incrementally across multiple raise/teardown cycles (tasks.md Section 7.5); each
 cycle gets its own dated entry below.
 
+Sections 8–10's work below was run against commit `c366e4ee63c8f345db3331379734aecbb4da8cf2`
+(branch `feat/task10-task11`). The cluster measured throughout Section 9 was Cycle 2,
+Kubernetes version `1.35.7`.
+
 ## Cost inventory re-confirmation (task 7.1)
 
 Checked `design.md`'s "Azure resources this change would create, and what each
@@ -998,3 +1002,53 @@ travelagentnorik1709               cloud-shell-storage-travel  germanywestcentra
 Subscription-wide, exactly the same 4 resources in `travel-agent-platform` that task 10.3 already recorded (ACR, Key Vault, 2 identities), plus `NetworkWatcher_germanywestcentral` and a Cloud Shell storage account — both outside `design.md`'s inventory and outside this project's own resource groups.
 
 This matches `design.md` D10's standing-cost claim: ACR ≈$5/month, everything else ≈$0.
+
+**Task 10.4 — Pipeline still publishes after teardown.**
+
+Run: https://github.com/Taliko5/travel-agent-platform/actions/runs/35584311566/job/106284127297
+
+The push job's build-and-push-to-ACR steps succeeded. The deploy step failed:
+
+```
+Run az aks get-credentials --resource-group "travel-agent-cluster" --name "travel-agent" --overwrite-existing
+ERROR: (AuthorizationFailed) The client '***' with object id '2785c1f0-588c-438c-9818-63422fd5307d' does not have authorization to perform action 'Microsoft.ContainerService/managedClusters/listClusterUserCredential/action' over scope '/subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourceGroups/travel-agent-cluster/providers/Microsoft.ContainerService/managedClusters/travel-agent' or the scope is invalid. If access was recently granted, please refresh your credentials.
+Error: Process completed with exit code 1.
+```
+
+This is `AuthorizationFailed`, not a resource-not-found error — worth being precise about. `azurerm_role_assignment.ci_aks_cluster_user` / `ci_aks_rbac_cluster_admin` (task 5.9, `design.md` D4) are declared in the cluster Terraform state, the same state Section 10 destroys — so CI's access grant to the cluster resource group was destroyed along with the cluster itself. Azure's control plane does not distinguish "no access" from "doesn't exist" for an unauthorized caller, so the error text alone doesn't prove which — but either way this is a designed consequence of D10, not a CI regression. CI's own identity, federated credential and ACR push permission (platform-state resources, task 4.4) were untouched, which the successful build+push half already demonstrates.
+
+## Previously-unverified claims this run settled
+
+| Claim | Settled by | Result |
+|---|---|---|
+| `design.md` D14's AKS-managed add-on pods' CPU/memory requests ("not known, not guessed" placeholder) | Task 9.1 | Real per-addon requests table measured on a raised cluster |
+| The region's available Kubernetes versions | Task 8.4 | `1.34.0`–`1.36.3` available |
+| `design.md` D5's claim that the CSI-driven Secret sync requires the pod's volume mount | Task 9.2 | Confirmed required |
+| The node OS disk's default size/type | Task 8.7 | `Managed`, 128GiB |
+| Whether a 2-vCPU system pool is actually rejected | Task 8.5 | `Standard_D2s_v7` succeeded — the documented 4-vCPU minimum is not enforced in this subscription/region |
+| `design.md` D8's ingestion-cost estimate | Task 9.12 | Real workspace ingestion figures measured |
+| `design.md` D2's `azapi_update_resource` Gateway API mechanism, working on a live cluster | Task 9.5's routing check | Confirmed working |
+| `design.md` D4's assumption that RBAC Writer would suffice for CI's `helm` deploy | Task 8.8 | Falsified — RBAC Writer can't touch CRDs; CI was widened to Cluster Admin |
+
+## Questions this run did not settle
+
+| Question | What would settle it |
+|---|---|
+| Why `design.md` D8's `annotations_allowed`/`labels_allowed` were set to `"app"` specifically | Not recoverable from git history — flagged as an open question for the repo owner to confirm from memory |
+| `design.md` D9's Grafana-credential contradiction with `docs/plan.md` | Left deliberately unfixed |
+| CI's role being Cluster Admin rather than a CRD-scoped custom role | Flagged in `design.md` D4 as a future improvement, not resolved here |
+| The Standard/LTS Kubernetes support-plan cost distinction task 8.4 surfaced | Not acted on |
+| The node OS disk's SKU tier (assumed Premium SSD) | Not independently confirmed against `az disk list` |
+| The Gateway's tight CPU-request headroom found in task 9.1 | HPA has little room to scale past 2 replicas — not resolved |
+| The release-branch/main-branch CI separation idea | Deferred to a future Section 12, already agreed with the owner |
+| The dashboard panel-count discrepancy found in task 10.5 (7 vs. 9 panels) | Not investigated further |
+
+## Task 11.11 — Spec vs. observation reconciliation
+
+**Finding 1 — spec defect, not fixed here.** `specs/deployment/spec.md`'s "The Full User-Facing Stack Runs on the Cluster" requirement's "The deployed system is exercised end to end" scenario requires the round trip to be served "without any part of the round trip depending on a process running on the operator's machine." The same spec's "No Traffic Crosses an Untrusted Network Unencrypted" requirement's "The entry point is internal" scenario requires operator access to be "through an authenticated, encrypted tunnel to the cluster" — which `design.md` D2/D15 implements as `kubectl port-forward`, confirmed working in tasks 9.4 and 9.6. A tunnel is, by definition, a process the operator runs that the round trip depends on. These two scenarios cannot both be satisfied while the entry point has no public address, which several other requirements in the same spec also mandate. This is a spec defect — an internal contradiction between two requirements in the same document — not something the implementation could resolve while also satisfying "no public exposure." Per this task's own instruction to report and stop, it is not fixed here.
+
+**Finding 2 — implementation limitation, no exercisable scenario.** The same spec's "The Retrieval Corpus Is Available to Every Serving Replica Without a Manual Step" requirement includes a "More than one replica serves traffic" scenario, asserting the same query retrieves the same context regardless of which replica handles it. `design.md` D11 and task 3.10 deliberately chose a single-replica backend with a `ReadWriteOnce` PVC — the requirement's own text says a single-replica attached volume satisfies it, but the specific multi-replica scenario has never been exercised, and scaling the backend Deployment beyond one replica would likely fail outright (a second pod on a different node could not mount the same RWO volume). Not tested — recorded as an open risk, not a confirmed failure.
+
+**Minor note — unexercised, but subsumed.** The same requirement's "A cluster is raised from a clean checkout" scenario, specifically "a second raise from the same commit SHALL produce the same set of objects," was not literally exercised: Cycles 1 and 2 raised different commits (fixes landed in between). Task 9.8's reproducibility review and task 9.9's zero-diff-across-commits finding are stronger properties that subsume this scenario's intent, so this is recorded as unexercised-but-subsumed, not as a gap.
+
+Per this task's instruction, none of these three items were altered in the spec or the implementation in this pass.
