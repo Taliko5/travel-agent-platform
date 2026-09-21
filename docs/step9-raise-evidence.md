@@ -468,6 +468,8 @@ Apply complete! Resources: 11 added, 0 changed, 0 destroyed.
 
 Single attempt, no errors. Task 8.6.1 (platform re-apply) is next.
 
+**Screenshot:** `docs/evidence/86-terraform-apply-complete.png`
+
 **Task 8.6.1 — platform re-apply, run in the platform dir.**
 
 Command:
@@ -487,6 +489,8 @@ Apply complete! Resources: 0 added, 1 changed, 0 destroyed.
 ```
 
 Confirmed: `terraform output backend_federated_credential_configured` → `true`.
+
+**Screenshots:** `docs/evidence/86-1-federated-cred-before.png` (before) and `docs/evidence/86-1-federated-cred-after.png` (after, configured=true)
 
 **Task 9.1 — Capacity.**
 
@@ -543,6 +547,8 @@ Concretely:
 | 1 | HPA scales `travel-agent-gateway-approuting-istio` to a 3rd replica | +100m | ~44–100m free per node | Scale-out likely leaves the new pod `Pending` |
 | 2 | Rolling update of any of the three app Deployments (old+new pod coexist) | +100m | ~44–100m free per node | Also tight |
 | 3 | Either case above needs an extra node | — | `cluster/variables.tf`'s node pool has a fixed `node_count`, no cluster autoscaler configured | Neither case self-resolves by adding a node |
+
+**Screenshot:** `docs/evidence/91-pods-running.png`
 
 **Task 9.2 — Secret delivery, reconfirmed on the current Cycle 2 cluster.**
 
@@ -682,6 +688,8 @@ Handling connection for 8080
 
 Frontend returned HTTP 200 for `travel-agent.internal`; backend returned two real, LLM-generated responses for `api.travel-agent.internal` — a `weather`-intent question (Paris) and a `transportation`-intent question (Seoul to Rome), independent from task 9.2's Tokyo measurement and from each other, confirming the backend served each specific request through the Gateway/HTTPRoute path rather than a cached or reused result, and that intent classification and routing both hold across a second, different intent on this same tunnel. All requests went to the same Service (`travel-agent-gateway-approuting-istio`) routed by hostname — this is the Gateway and HTTPRoute actually doing the routing (task 9.5's concern), exercised here as a byproduct; task 9.5 still separately confirms routing and that neither Service is individually reachable from outside the cluster.
 
+**Screenshot:** `docs/evidence/94-chat-demo.png` (curl-based; a browser UI screenshot may replace this later)
+
 **Task 9.5 — Routing.**
 
 **(1) Gateway-side control-plane confirmation** that both `HTTPRoute`s are actually attached and valid — the piece task 9.4 didn't check (9.4 tested from the client side; this confirms the Gateway API objects themselves report success):
@@ -722,6 +730,8 @@ travel-agent-frontend   ClusterIP   10.0.240.111   <none>        80/TCP    3h59m
 
 Both routes are accepted and resolved by the Gateway's controller (`istio.aks.azure.com/gateway-controller`) — the control-plane half of the routing requirement; the data-plane half (real responses through this exact path) is task 9.4's already-recorded curl results. Both Services being ClusterIP with no EXTERNAL-IP means there's no path to either from outside the cluster except through the Gateway or an authenticated `kubectl` tunnel (D2/D15's designed access path) — no LoadBalancer, no NodePort.
 
+**Screenshot:** `docs/evidence/95-gateway-httproute.png`
+
 **Task 9.6 — The entry point is internal.**
 
 The Gateway's own address is task 9.4's already-recorded `kubectl get gateway`/`get svc` output, not repeated here — a private VNet IP, not a public one. This task's own new measurement is proving the one public IP that does exist in the node resource group belongs to something else entirely, not the Gateway.
@@ -741,6 +751,8 @@ $ az network public-ip show -g "$NODE_RG" -n a71a91bb-82e3-4d00-9b36-097d91bcfc8
 ```
 
 Exactly one public IP exists in the node resource group, attached to `loadBalancers/kubernetes` — the AKS-managed outbound LB (SNAT/egress), already accounted for in `design.md`'s cost inventory as non-inbound — not to the Gateway's own (istio-provisioned) LB. Combined with task 9.4's already-recorded Gateway address (private VNet IP), the entry point has no public address anywhere. The only access path is `kubectl port-forward`, per `design.md` D2/D15 — already demonstrated in task 9.4.
+
+**Screenshot:** `docs/evidence/96-no-public-ip.png`
 
 **Task 9.7 — Corpus availability.**
 
@@ -785,6 +797,8 @@ $ curl -s -X POST -H "Host: api.travel-agent.internal" -H "Content-Type: applica
 
 All six facts match across the pod replacement; only the LLM's phrasing differs, as expected without `temperature=0`. This confirms the corpus available to `retrieve_context` was unchanged by the pod delete/recreate — consistent with the PVC surviving the replacement and `rag/ingest.py`'s idempotent skip (it only ingests when the Chroma store is empty) not silently re-ingesting or drifting.
 
+**Screenshots:** `docs/evidence/97a-pod-delete.png` and `docs/evidence/97b-chat-after-delete.png`
+
 **Task 9.8 — Reproducibility.**
 
 Reviewed every command run between task 8.1 and task 9.7 (this cycle). All `terraform apply` invocations match the exact sequences `Infrastructure/terraform/platform/README.md` and `Infrastructure/terraform/cluster/README.md` document (including the var flags and their sourcing between the two states). Task 8.2's CI-variable setup via the GitHub Settings UI is itself the documented step (`tasks.md` 6.7/8.2, `design.md` D4). Every command run in Section 9 today (9.1–9.7) was either a read-only measurement/verification command (`kubectl get`/`describe`, `az show`/`list`, `curl`) with no effect on deployed state, or task 9.7's own explicitly-required pod deletion (exercising the Deployment controller's own reconciliation, not a manual fix). The one command not written anywhere in the repository is task 8.3's `az keyvault secret set ... --value <key>` — supplying `GOOGLE_API_KEY`'s value, which `design.md` D5 deliberately keeps out of Terraform, and which per 7.5.3 only runs once across the whole raise/destroy sequence (the platform state, and therefore the vault secret, isn't destroyed between cycles). This matches exactly what the spec allows: the reproducibility gap is empty except for supplying the secret value. No defect to fix in Sections 3–6.
@@ -822,6 +836,8 @@ Three queries, each scoped to `namespace="default"`, `container=~"backend|fronte
 
 All three queries returned real, non-zero data scoped to the deployed containers, confirming managed Prometheus is actively collecting cAdvisor metrics for the running backend/frontend pods per `design.md` D8.
 
+**Screenshot:** `docs/evidence/910-azure-monitor-cpu.png`
+
 **Task 9.11 — Grafana datasource.**
 
 Added a second datasource on the existing local Grafana, using the `grafana-azureprometheus-datasource` plugin rather than the core Prometheus datasource — Azure AD auth on core Prometheus is deprecated in Grafana 13, this plugin is the current supported path. Points at the managed Prometheus workspace already named above (task 9.10). Auth: App Registration `travel-agent-grafana-local`, created for this local verification only — **not Terraform-managed**, not a tracked resource. `docker-compose.yaml`'s `grafana` service gained `GF_INSTALL_PLUGINS=grafana-azureprometheus-datasource` and `GF_AUTH_AZURE_AUTH_ENABLED=true`.
@@ -831,6 +847,8 @@ Verified in Explore, against the new datasource:
 - `sum(rate(container_cpu_usage_seconds_total{job="cadvisor"}[5m])) by (pod)` — live, moving CPU-usage data broken out by real AKS pod names (`travel-agent-gateway-approuting-istio`, `coredns`, `konnectivity-agent`, `metrics-server`, `ama-metrics-*`, `azure-cns-*`) — confirms real cluster telemetry, not a static series.
 
 Existing local `Prometheus` datasource (`prometheus:9090`), its provisioning file, and its history are unchanged — both datasources coexist in the Data sources list.
+
+**Screenshot:** `docs/evidence/911-grafana-datasource.png`
 
 **Task 9.12 — Ingestion volume.**
 
@@ -856,6 +874,8 @@ Against Azure's default workspace limits — 1,000,000 active time series and 1,
 **Scrape-interval cross-check.** At a 30-second scrape interval (2 scrapes/min), 7,494 series × 2 ≈ 14,988 samples/min — closely matching the measured ~13,700–14,900/min average. This corroborates D8's previously-unverified 30-second scrape-interval assumption, not just the series count.
 
 Both are real, workspace-reported figures for this session, replacing D8's assumed 30-second-interval/1,000-series estimate.
+
+**Screenshot:** `docs/evidence/912-ingestion-metrics.png`
 
 **Task 9.13 — Local history untouched.**
 
@@ -919,6 +939,8 @@ $ az role assignment create --assignee f2739b2d-73ba-48c1-a843-8cbfea73cf5f --ro
 ```
 No further `kubectl` action needed — kubelet was already retrying the failed CSI mount on the same stuck pod automatically. Time from restore command to the pod reaching `Running`/`Ready` (1/1): ~1.5 minutes. Per `design.md` D4, this propagation delay is documented behaviour, not a failure — the measurement recorded here is the delay itself, not a defect.
 
+**Screenshots:** `docs/evidence/915a-keyvault-revoke.png`, `docs/evidence/915b-keyvault-failure.png`, `docs/evidence/915c-keyvault-restore.png`, `docs/evidence/915d-keyvault-recovered.png`
+
 **Tasks 10.1/10.2 — Cycle 2 teardown (2026-09-20), reconfirming Cycle 1's 2026-09-16 result.**
 
 ```
@@ -941,6 +963,8 @@ ResourceGroupNotFound
 ```
 `ResourceGroupNotFound` is a stronger confirmation than an empty resource list — the cluster resource group is itself one of the 11 destroyed resources (task 7.1's inventory), so there is nothing left for a resource list to even scope against. No per-hour billable resource from the session remains.
 
+**Screenshot:** `docs/evidence/10a-destroy-complete.png`
+
 **Task 10.3 — Registry, vault and identities survive teardown.**
 
 ```
@@ -952,6 +976,8 @@ All 4 platform resources present, all Status `Succeeded`: `travelagentacr52f2y82
 $ az keyvault secret show --vault-name travel-agent-kv-52f2y82s --name google-api-key --query "{name:name, enabled:attributes.enabled}" -o table
 ```
 `google-api-key`, Enabled: `True` — still readable for the next raise (value not shown, per `CLAUDE.md`).
+
+**Screenshot:** `docs/evidence/10b-platform-survives.png`
 
 **Tasks 10.5/10.6 — Local stack untouched; standing cost matches inventory (2026-09-21).**
 
@@ -1052,3 +1078,8 @@ This is `AuthorizationFailed`, not a resource-not-found error — worth being pr
 **Minor note — unexercised, but subsumed.** The same requirement's "A cluster is raised from a clean checkout" scenario, specifically "a second raise from the same commit SHALL produce the same set of objects," was not literally exercised: Cycles 1 and 2 raised different commits (fixes landed in between). Task 9.8's reproducibility review and task 9.9's zero-diff-across-commits finding are stronger properties that subsume this scenario's intent, so this is recorded as unexercised-but-subsumed, not as a gap.
 
 Per this task's instruction, none of these three items were altered in the spec or the implementation in this pass.
+
+## Design decision snapshots
+
+- D4 (CI RBAC widened to Cluster Admin): `docs/evidence/d4-rbac-cluster-admin-applied.png`
+- D11 (single-replica backend + RWO PVC for Chroma): `docs/evidence/d11-pvc-bound.png`
