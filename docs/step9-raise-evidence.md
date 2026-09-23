@@ -172,17 +172,17 @@ Apply complete! Resources: 10 added, 0 changed, 0 destroyed.
 
 Outputs:
 
-acr_id = "/subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourceGroups/travel-agent-platform/providers/Microsoft.ContainerRegistry/registries/travelagentacr52f2y82s"
+acr_id = "/subscriptions/<subscription-id>/resourceGroups/travel-agent-platform/providers/Microsoft.ContainerRegistry/registries/travelagentacr52f2y82s"
 acr_login_server = "travelagentacr52f2y82s.azurecr.io"
 backend_federated_credential_configured = false
-backend_identity_client_id = "f2739b2d-73ba-48c1-a843-8cbfea73cf5f"
-backend_identity_principal_id = "d34674d1-c3c0-4a18-a6ec-8aa749fb39af"
-ci_identity_client_id = "c6f7b5b4-846f-4218-a3c7-b48bcc037993"
-ci_identity_principal_id = "2785c1f0-588c-438c-9818-63422fd5307d"
-key_vault_id = "/subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourceGroups/travel-agent-platform/providers/Microsoft.KeyVault/vaults/travel-agent-kv-52f2y82s"
+backend_identity_client_id = "<backend-identity-client-id>"
+backend_identity_principal_id = "<backend-identity-principal-id>"
+ci_identity_client_id = "<ci-identity-client-id>"
+ci_identity_principal_id = "<ci-identity-principal-id>"
+key_vault_id = "/subscriptions/<subscription-id>/resourceGroups/travel-agent-platform/providers/Microsoft.KeyVault/vaults/travel-agent-kv-52f2y82s"
 key_vault_name = "travel-agent-kv-52f2y82s"
 key_vault_secret_object_name = "google-api-key"
-key_vault_tenant_id = "18ff101d-9da4-499d-acc0-e9dbef4f4d8f"
+key_vault_tenant_id = "<tenant-id>"
 region = "germanywestcentral"
 resource_group_name = "travel-agent-platform"
 ```
@@ -385,9 +385,9 @@ Final `terraform output`:
 
 ```
 cluster_name = "travel-agent"
-kubelet_identity_object_id = "8dcf9a8a-6074-423c-af40-a739c0203491"
+kubelet_identity_object_id = "<kubelet-identity-object-id>"
 monitor_workspace_id = ".../Microsoft.Monitor/accounts/travel-agent-metrics"
-oidc_issuer_url = "https://germanywestcentral.oic.prod-aks.azure.com/18ff101d-9da4-499d-acc0-e9dbef4f4d8f/f5675991-3c9e-4edc-9b54-4c7e776b69ba/"
+oidc_issuer_url = "https://germanywestcentral.oic.prod-aks.azure.com/<tenant-id>/<aks-oidc-issuer-uuid>/"
 resource_group_name = "travel-agent-cluster"
 ```
 
@@ -744,10 +744,10 @@ MC_travel-agent-cluster_travel-agent_germanywestcentral
 $ az network public-ip list -g "$NODE_RG" -o table
 Name                                  ResourceGroup                                             Location             Zones    Address       IdleTimeoutInMinutes    ProvisioningState
 ------------------------------------  --------------------------------------------------------  -------------------  -------  ------------  ----------------------  -------------------
-a71a91bb-82e3-4d00-9b36-097d91bcfc8e  MC_travel-agent-cluster_travel-agent_germanywestcentral   germanywestcentral  231      4.182.97.209  4                       Succeeded
+<outbound-public-ip-name>  MC_travel-agent-cluster_travel-agent_germanywestcentral   germanywestcentral  231      4.182.97.209  4                       Succeeded
 
-$ az network public-ip show -g "$NODE_RG" -n a71a91bb-82e3-4d00-9b36-097d91bcfc8e --query "ipConfiguration.id" -o tsv
-/subscriptions/<redacted>/resourceGroups/MC_travel-agent-cluster_travel-agent_germanywestcentral/providers/Microsoft.Network/loadBalancers/kubernetes/frontendIPConfigurations/a71a91bb-82e3-4d00-9b36-097d91bcfc8e
+$ az network public-ip show -g "$NODE_RG" -n <outbound-public-ip-name> --query "ipConfiguration.id" -o tsv
+/subscriptions/<redacted>/resourceGroups/MC_travel-agent-cluster_travel-agent_germanywestcentral/providers/Microsoft.Network/loadBalancers/kubernetes/frontendIPConfigurations/<outbound-public-ip-name>
 ```
 
 Exactly one public IP exists in the node resource group, attached to `loadBalancers/kubernetes` — the AKS-managed outbound LB (SNAT/egress), already accounted for in `design.md`'s cost inventory as non-inbound — not to the Gateway's own (istio-provisioned) LB. Combined with task 9.4's already-recorded Gateway address (private VNet IP), the entry point has no public address anywhere. The only access path is `kubectl port-forward`, per `design.md` D2/D15 — already demonstrated in task 9.4.
@@ -856,7 +856,7 @@ This replaces `design.md` D8's cost figure, which is arithmetic over two assumed
 
 ```
 $ az monitor metrics list \
-  --resource /subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourcegroups/travel-agent-cluster/providers/microsoft.monitor/accounts/travel-agent-metrics \
+  --resource /subscriptions/<subscription-id>/resourcegroups/travel-agent-cluster/providers/microsoft.monitor/accounts/travel-agent-metrics \
   --metric ActiveTimeSeriesPercentUtilization EventsPerMinuteIngestedPercentUtilization \
   --aggregation Average Maximum \
   --interval PT5M \
@@ -921,8 +921,8 @@ $ kubectl get pv
 **Task 9.15 — Grant revocation.**
 
 ```
-$ az role assignment delete --assignee f2739b2d-73ba-48c1-a843-8cbfea73cf5f --role "Key Vault Secrets User" \
-    --scope /subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourceGroups/travel-agent-platform/providers/Microsoft.KeyVault/vaults/travel-agent-kv-52f2y82s
+$ az role assignment delete --assignee <backend-identity-client-id> --role "Key Vault Secrets User" \
+    --scope /subscriptions/<subscription-id>/resourceGroups/travel-agent-platform/providers/Microsoft.KeyVault/vaults/travel-agent-kv-52f2y82s
 $ kubectl rollout restart deployment/travel-agent-backend
 ```
 
@@ -934,8 +934,8 @@ RESPONSE 403: Forbidden, ERROR CODE: Forbidden, innererror.code: ForbiddenByRbac
 Pod stuck at `Init:0/1` the whole time — it never reached `Running`, so it could not have served from any cached credential. This is the behavioural counterpart to task 9.3's structural claim (no cacheable credential exists): here it's shown actually failing, not just theoretically unable to.
 
 ```
-$ az role assignment create --assignee f2739b2d-73ba-48c1-a843-8cbfea73cf5f --role "Key Vault Secrets User" \
-    --scope /subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourceGroups/travel-agent-platform/providers/Microsoft.KeyVault/vaults/travel-agent-kv-52f2y82s
+$ az role assignment create --assignee <backend-identity-client-id> --role "Key Vault Secrets User" \
+    --scope /subscriptions/<subscription-id>/resourceGroups/travel-agent-platform/providers/Microsoft.KeyVault/vaults/travel-agent-kv-52f2y82s
 ```
 No further `kubectl` action needed — kubelet was already retrying the failed CSI mount on the same stuck pod automatically. Time from restore command to the pod reaching `Running`/`Ready` (1/1): ~1.5 minutes. Per `design.md` D4, this propagation delay is documented behaviour, not a failure — the measurement recorded here is the delay itself, not a defect.
 
@@ -1037,7 +1037,7 @@ The push job's build-and-push-to-ACR steps succeeded. The deploy step failed:
 
 ```
 Run az aks get-credentials --resource-group "travel-agent-cluster" --name "travel-agent" --overwrite-existing
-ERROR: (AuthorizationFailed) The client '***' with object id '2785c1f0-588c-438c-9818-63422fd5307d' does not have authorization to perform action 'Microsoft.ContainerService/managedClusters/listClusterUserCredential/action' over scope '/subscriptions/c7927c9d-c486-4c11-bab4-19db99e220b6/resourceGroups/travel-agent-cluster/providers/Microsoft.ContainerService/managedClusters/travel-agent' or the scope is invalid. If access was recently granted, please refresh your credentials.
+ERROR: (AuthorizationFailed) The client '***' with object id '<ci-identity-principal-id>' does not have authorization to perform action 'Microsoft.ContainerService/managedClusters/listClusterUserCredential/action' over scope '/subscriptions/<subscription-id>/resourceGroups/travel-agent-cluster/providers/Microsoft.ContainerService/managedClusters/travel-agent' or the scope is invalid. If access was recently granted, please refresh your credentials.
 Error: Process completed with exit code 1.
 ```
 
