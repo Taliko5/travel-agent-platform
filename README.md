@@ -2,6 +2,14 @@
 
 AI-powered travel planning agent with production-realistic infrastructure.
 
+## Demo
+
+![Completed chat response for "find the best root to go to London from Berlin", labeled with the transportation intent and listing direct-flight and high-speed-train options with approximate times](docs/demo/chat-response.png)
+
+![Chat UI showing a completed transportation-intent answer for "find the best root to go to London from Berlin" (flight, train, and bus options), with a follow-up question, "Weather in London November", being typed into the input box](docs/demo/chat-demo.gif)
+
+This is the chat UI running against the real backend, reached through `kubectl port-forward` — the app has no public endpoint (see `design.md` D2/D15).
+
 ### Current Architecture
 
 <img src="docs/diagrams/architecture-current.svg" alt="Current architecture: GitHub Actions builds and tests the app, then pushes images to Azure Container Registry over OIDC with no stored secrets, and deploys via helm upgrade to AKS. Inside AKS, an internal-only Istio Gateway (no public IP) routes to the Next.js frontend and the FastAPI/LangGraph backend. The backend reads from a ChromaDB RAG store, calls three MCP tool servers (weather, flights, hotels), and reads GOOGLE_API_KEY from Azure Key Vault via Workload Identity. An operator reaches the Gateway only through kubectl port-forward. Managed Prometheus scrapes both the frontend and backend.">
