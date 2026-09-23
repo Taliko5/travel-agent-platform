@@ -8,32 +8,7 @@ An AI travel-planning agent built on LangGraph, RAG (ChromaDB), and a set of MCP
 
 ## Architecture
 
-<pre class="mermaid">
-flowchart TB
-    subgraph GitHub["GitHub Actions CI/CD"]
-        CI[Build & Test] -->|OIDC, no stored secrets| ACR[Azure Container Registry]
-        CI -->|helm upgrade| AKS
-    end
-
-    subgraph AKS["Azure Kubernetes Service"]
-        GW[Istio Gateway API<br/>internal only, no public IP] --> FE[Frontend<br/>Next.js]
-        GW --> BE[Backend<br/>FastAPI + LangGraph]
-        BE --> RAG[(ChromaDB<br/>RAG store)]
-        BE --> MCP1[MCP: Weather]
-        BE --> MCP2[MCP: Flights]
-        BE --> MCP3[MCP: Hotels]
-        BE -.Workload Identity.-> KV[Azure Key Vault<br/>GOOGLE_API_KEY]
-    end
-
-    Operator[Operator] -->|kubectl port-forward| GW
-    Prometheus[Managed Prometheus] -.scrapes.-> BE
-    Prometheus -.scrapes.-> FE
-</pre>
-
-<script type="module">
-  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-  mermaid.initialize({ startOnLoad: true });
-</script>
+<img src="diagrams/architecture-current.svg" alt="Current architecture: GitHub Actions builds and tests the app, then pushes images to Azure Container Registry over OIDC with no stored secrets, and deploys via helm upgrade to AKS. Inside AKS, an internal-only Istio Gateway (no public IP) routes to the Next.js frontend and the FastAPI/LangGraph backend. The backend reads from a ChromaDB RAG store, calls three MCP tool servers (weather, flights, hotels), and reads GOOGLE_API_KEY from Azure Key Vault via Workload Identity. An operator reaches the Gateway only through kubectl port-forward. Managed Prometheus scrapes both the frontend and backend.">
 
 ## Why a Disposable Cluster
 

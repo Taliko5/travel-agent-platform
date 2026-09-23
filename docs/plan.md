@@ -17,7 +17,7 @@
 | 11 | Private networking — VNet, private endpoints, Private DNS, TLS | Planned |
 | 12 | IaC quality gates + remote Terraform state | Planned |
 | 13 | Container image and Helm chart hardening | Planned |
-| 14 | Managed data service — PostgreSQL or Blob Storage | Planned |
+| 14 | Managed data service — save & export a trip plan as PDF (PostgreSQL + Blob) | Planned |
 | 15 | Port to AWS (EKS) | Planned |
 
 ---
@@ -197,18 +197,35 @@ Scope:
 
 ---
 
-## Step 14: Managed Data Service — PostgreSQL or Blob Storage
+## Step 14: Managed Data Service — Save & Export a Trip Plan as PDF
 
-Not designed or scheduled yet — noted here for later. One of the two, not both; the choice is part of the design.
+Not designed or scheduled yet — noted here for later.
 
-**Why.** Everything the workload stores today lives on a single `ReadWriteOnce` PVC (ChromaDB), which is also why the backend Deployment uses the `Recreate` strategy. There is no managed data service in the architecture, and no data path that exercises the private networking from Step 11.
+**Why.** Everything the workload stores today lives on a single `ReadWriteOnce` PVC (ChromaDB), which is also why the backend Deployment uses the `Recreate` strategy. There is no managed data service in the architecture, and no data path that exercises the private networking from Step 11. Rather than picking Postgres or Blob in isolation, this step is one feature that needs both: save a conversation and its trip plan, and export it as a PDF.
 
-Options:
+**Architecture (decided):**
 
-- **Azure Database for PostgreSQL Flexible Server** with private access (VNet integration on the delegated subnet from Step 11) — for example, to persist conversation history, which the API currently does not keep. Authenticating with Microsoft Entra ID through the backend's existing Workload Identity (D5) would keep the "no stored credentials" property instead of adding a database password.
-- **Azure Blob Storage** behind a private endpoint — as the source of truth for the RAG documents in `backend/rag/data/`, which would be ingested from storage by the `rag-ingest` init container instead of being baked into the image.
+- **PostgreSQL Flexible Server**, private access on Step 11's delegated subnet — sessions, messages, trip plans, PDF metadata. Microsoft Entra ID authentication via the backend's existing user-assigned identity (`Infrastructure/terraform/platform/identities.tf`, `azurerm_user_assigned_identity.backend`) — no database password anywhere.
+- **Blob Storage** behind a private endpoint holds the generated PDFs. Never publicly reachable.
+- **Download path:** the backend reads the PDF from Blob and streams it back to the browser (`Content-Type: application/pdf`). The browser never touches Blob directly.
+- **Rejected: a user-delegation SAS URL.** That would require the browser to reach Blob directly, which contradicts the private endpoint and the no-public-exposure stance `design.md` D2/D15 already takes. It also only pays off for large files, and a trip-plan PDF is small. Revisit if file sizes grow.
+- Users are identified by an anonymous, high-entropy session ID cookie. No login, no user accounts, no Entra ID for end users.
+- Schema migrations with Alembic, run as a Helm pre-upgrade hook Job, so the schema is updated before the new application image starts.
 
-Either way, Step 11 comes first: the point is the private data path, not the service itself.
+**Security constraints**, recorded here because this feature widens the blast radius of an app-level bug:
+
+- The database role the backend uses gets only the privileges this feature needs on its own tables — no superuser, no DDL at runtime.
+- Parameterized queries only (SQLAlchemy); no string-built SQL.
+- Write-then-record ordering: confirm the Blob write succeeded before recording the PDF in Postgres, so there is no row pointing at a file that doesn't exist.
+
+**Open decisions, not decided here:**
+
+- Which Terraform layer the database belongs to, given the cluster layer is destroyed every session. A stopped Flexible Server auto-starts after 7 days, so "stop it between sessions" is not a zero-cost option.
+- Retention period for stored conversations (GDPR).
+- Backup/restore: verify point-in-time restore once and record the evidence, in the style of `docs/step9-raise-evidence.md`.
+- **Cost.** Rough per-unit prices only, not a costed design — from the Azure Retail Prices API, `germanywestcentral`, read 2026-09-23: smallest Burstable compute (`B1MS`, 1 vCore/2 GiB) ≈ $0.0199/hour (≈$14.53/month at 730 hours); Postgres Flexible Server storage ≈ $0.137/GB-month; Blob Hot LRS storage ≈ $0.0196/GB-month. Neither a storage size nor Step 11's own private-endpoint charge (≈$0.01/hour each) is factored into these figures yet — this is an estimate for sizing conversation, not a billed figure.
+
+Step 11 comes first either way: the point is the private data path, not the service itself.
 
 ---
 

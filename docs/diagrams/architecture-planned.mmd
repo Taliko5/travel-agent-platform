@@ -1,0 +1,44 @@
+flowchart TB
+    Banner["⚠ PLANNED TARGET STATE — NOT DEPLOYED TODAY<br/>tracks docs/plan.md Steps 11–14"]:::banner
+
+    Operator["Operator / Browser"] -->|kubectl port-forward,<br/>TLS terminates at Gateway| GW
+
+    subgraph VNet["Terraform-managed VNet — Step 11 (planned)"]
+        direction TB
+
+        subgraph NodesSubnet["Nodes subnet"]
+            GW["Istio Gateway API<br/>TLS listener"]:::planned --> FE["Frontend"]:::planned
+            GW --> BE["Backend"]:::planned
+        end
+
+        subgraph PESubnet["Private endpoints subnet"]
+            PE_KV["Private Endpoint<br/>Key Vault"]:::planned
+            PE_ACR["Private Endpoint<br/>ACR"]:::planned
+            PE_Blob["Private Endpoint<br/>Blob Storage"]:::planned
+        end
+
+        subgraph DBSubnet["Database delegated subnet — Step 14 (planned)"]
+            PG[("PostgreSQL Flexible Server<br/>sessions, messages, trip plans")]:::planned
+        end
+    end
+
+    subgraph DNSZones["Private DNS Zones — Step 11 (planned)"]
+        direction TB
+        DNS1["privatelink.vaultcore.azure.net"]:::planned
+        DNS2["privatelink.azurecr.io"]:::planned
+        DNS3["privatelink.blob.core.windows.net"]:::planned
+        DNS4["privatelink.postgres.database.azure.com"]:::planned
+    end
+
+    BE -->|Workload Identity, no password| PG
+    BE -->|Workload Identity, no password<br/>write PDF| PE_Blob
+    PE_Blob -->|read PDF, stream to browser| BE
+    BE -.Workload Identity, no password.-> PE_KV
+
+    PE_KV -.resolves via.-> DNS1
+    PE_ACR -.resolves via.-> DNS2
+    PE_Blob -.resolves via.-> DNS3
+    PG -.resolves via.-> DNS4
+
+    classDef planned fill:#fff8e1,stroke:#b45309,stroke-width:2px,stroke-dasharray: 5 3,color:#111
+    classDef banner fill:#fef3c7,stroke:#b45309,stroke-width:3px,color:#111,font-weight:bold

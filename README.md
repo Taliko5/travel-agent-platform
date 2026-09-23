@@ -1,28 +1,20 @@
 # Travel Agent Platform
 
-AI-powered travel planning agent with production-ready infrastructure.
+AI-powered travel planning agent with production-realistic infrastructure.
 
-```mermaid
-flowchart TB
-    subgraph GitHub["GitHub Actions CI/CD"]
-        CI[Build & Test] -->|OIDC, no stored secrets| ACR[Azure Container Registry]
-        CI -->|helm upgrade| AKS
-    end
+### Current Architecture
 
-    subgraph AKS["Azure Kubernetes Service"]
-        GW[Istio Gateway API<br/>internal only, no public IP] --> FE[Frontend<br/>Next.js]
-        GW --> BE[Backend<br/>FastAPI + LangGraph]
-        BE --> RAG[(ChromaDB<br/>RAG store)]
-        BE --> MCP1[MCP: Weather]
-        BE --> MCP2[MCP: Flights]
-        BE --> MCP3[MCP: Hotels]
-        BE -.Workload Identity.-> KV[Azure Key Vault<br/>GOOGLE_API_KEY]
-    end
+<img src="docs/diagrams/architecture-current.svg" alt="Current architecture: GitHub Actions builds and tests the app, then pushes images to Azure Container Registry over OIDC with no stored secrets, and deploys via helm upgrade to AKS. Inside AKS, an internal-only Istio Gateway (no public IP) routes to the Next.js frontend and the FastAPI/LangGraph backend. The backend reads from a ChromaDB RAG store, calls three MCP tool servers (weather, flights, hotels), and reads GOOGLE_API_KEY from Azure Key Vault via Workload Identity. An operator reaches the Gateway only through kubectl port-forward. Managed Prometheus scrapes both the frontend and backend.">
 
-    Operator[Operator] -->|kubectl port-forward| GW
-    Prometheus[Managed Prometheus] -.scrapes.-> BE
-    Prometheus -.scrapes.-> FE
-```
+Diagram source: [`docs/diagrams/architecture-current.mmd`](docs/diagrams/architecture-current.mmd).
+
+### Planned Architecture (Steps 11–14)
+
+This is the planned target state tracked by [`docs/plan.md`](docs/plan.md) Steps 11–14 — **not what's deployed today**. See the diagram above for the current, actually-deployed architecture.
+
+<img src="docs/diagrams/architecture-planned.svg" alt="Planned architecture (not deployed): a Terraform-managed VNet holds a nodes subnet (AKS with an Istio Gateway now terminating TLS), a private-endpoints subnet (private endpoints for Key Vault, ACR, and Blob Storage, each resolved through its own Private DNS Zone), and a database-delegated subnet (PostgreSQL Flexible Server). The backend reaches Postgres, Blob, and Key Vault entirely through Workload Identity — no passwords on any of those edges. The PDF export path: the operator/browser reaches the Gateway over TLS through the existing kubectl port-forward tunnel; the backend writes a generated PDF to Blob via its private endpoint, then reads it back and streams it to the browser, so the browser never touches Blob directly.">
+
+Diagram source: [`docs/diagrams/architecture-planned.mmd`](docs/diagrams/architecture-planned.mmd).
 
 ## What This Repository Demonstrates
 
@@ -225,7 +217,7 @@ In short: `CLAUDE.md` tells the agent how to work in the repo *right now*, `docs
 - [ ] Step 11: Private networking — VNet, private endpoints, Private DNS, TLS
 - [ ] Step 12: IaC quality gates + remote Terraform state
 - [ ] Step 13: Container image and Helm chart hardening
-- [ ] Step 14: Managed data service — PostgreSQL or Blob Storage
+- [ ] Step 14: Managed data service — save & export a trip plan as PDF (PostgreSQL + Blob)
 - [ ] Step 15: Port to AWS (EKS)
 
 Details and rationale for each planned step: [`docs/plan.md`](docs/plan.md).
