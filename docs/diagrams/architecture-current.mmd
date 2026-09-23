@@ -1,0 +1,19 @@
+flowchart TB
+    subgraph GitHub["GitHub Actions CI/CD"]
+        CI[Build & Test] -->|OIDC, no stored secrets| ACR[Azure Container Registry]
+        CI -->|helm upgrade| AKS
+    end
+
+    subgraph AKS["Azure Kubernetes Service"]
+        GW[Istio Gateway API<br/>internal only, no public IP] --> FE[Frontend<br/>Next.js]
+        GW --> BE[Backend<br/>FastAPI + LangGraph]
+        BE --> RAG[(ChromaDB<br/>RAG store)]
+        BE --> MCP1[MCP: Weather]
+        BE --> MCP2[MCP: Flights]
+        BE --> MCP3[MCP: Hotels]
+        BE -.Workload Identity.-> KV[Azure Key Vault<br/>GOOGLE_API_KEY]
+    end
+
+    Operator[Operator] -->|kubectl port-forward| GW
+    Prometheus[Managed Prometheus] -.scrapes.-> BE
+    Prometheus -.scrapes.-> FE

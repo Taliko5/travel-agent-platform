@@ -14,7 +14,11 @@
 | 8 | Observability (Grafana, Prometheus, OpenTelemetry) | Done |
 | 9 | Azure deployment (AKS) | Done |
 | 10 | CI branch separation + browser-triggered cluster launch | Planned |
-| 11 | Port to AWS (EKS) | Planned |
+| 11 | Private networking — VNet, private endpoints, Private DNS, TLS | Planned |
+| 12 | IaC quality gates + remote Terraform state | Planned |
+| 13 | Container image and Helm chart hardening | Planned |
+| 14 | Managed data service — save & export a trip plan as PDF (PostgreSQL + Blob) | Planned |
+| 15 | Port to AWS (EKS) | Planned |
 
 ---
 
@@ -89,7 +93,7 @@ Frontend CI wiring (format-check, real `npm test`, coverage as actual workflow s
 
 See `docs/step7.md` and `openspec/changes/harden-ci-pipeline/`.
 
-Goal: backend (`test`/`build-backend`) and frontend (`frontend`/`build-frontend`) verification + Docker build jobs on push to `main` and PRs, gated by branch protection so the checks are a real merge requirement. No secrets required — all tests mocked. Step 9 adds a `push` job for ECR.
+Goal: backend (`test`/`build-backend`) and frontend (`frontend`/`build-frontend`) verification + Docker build jobs on push to `main` and PRs, gated by branch protection so the checks are a real merge requirement. No secrets required — all tests mocked. Step 9 adds a `push` job for ACR.
 
 Built: `dorny/paths-filter` job-level path filtering (backend-only and frontend-only changes skip the other stack's real work while still reporting a required status), workflow-level `concurrency` (cancel superseded runs) and `permissions: contents: read`, the frontend job (`npm ci` → lint → test → build, using the ESLint config and Vitest suite `step6c-test-lint-format` already landed), `build-frontend` (Docker build parity with backend), Trivy image scanning (non-blocking, SARIF to the Security tab) on both build jobs, and a `gitleaks` job for secret scanning. `renovate.json` added at repo root for automated pip/npm dependency updates.
 
@@ -115,7 +119,7 @@ Key metrics: `/chat` latency (p50/p95/p99), intent distribution, LLM call durati
 
 Deploy the containerized stack to Azure Kubernetes Service, with the infrastructure defined in Terraform.
 
-**Why AKS, and not ECS or EKS.** The earlier version of this section offered ECS ("simpler") or EKS ("matches the k8s manifests from Step 5"). The second reason did not survive inspection: `Infrastructure/k8s/` holds two files covering the backend alone, out of the four services `docker-compose.yaml` runs, and every line of them changes on the way to a managed cluster anyway — image reference, secret source, service type. What genuinely carries between clouds is Kubernetes itself: Deployment, Service, Ingress, HPA, probes, `kubectl`. That layer is identical on AKS, EKS and GKE. The layer that does not carry is the cloud-specific one — network, identity, registry, ingress controller, log sink. AKS is a given for this step rather than a conclusion argued here; what is worth recording is that the choice decides only that second layer, and that Step 10 exists to prove the first layer really does move.
+**Why AKS, and not ECS or EKS.** The earlier version of this section offered ECS ("simpler") or EKS ("matches the k8s manifests from Step 5"). The second reason did not survive inspection: `Infrastructure/k8s/` holds two files covering the backend alone, out of the four services `docker-compose.yaml` runs, and every line of them changes on the way to a managed cluster anyway — image reference, secret source, service type. What genuinely carries between clouds is Kubernetes itself: Deployment, Service, Ingress, HPA, probes, `kubectl`. That layer is identical on AKS, EKS and GKE. The layer that does not carry is the cloud-specific one — network, identity, registry, ingress controller, log sink. AKS is a given for this step rather than a conclusion argued here; what is worth recording is that the choice decides only that second layer, and that Step 15 exists to prove the first layer really does move.
 
 **The deliverable is the repository, not a running URL.** This step produces Terraform, manifests and documentation; the cluster is raised on demand and torn down afterwards rather than left running. Writing the Terraform does not finish the step — raising a cluster from it, verifying it, and destroying it does, with the result recorded. Several of the assumptions this step rests on cannot be settled any other way, and the change's design names which ones. A public URL would show the chat UI, which is the one thing this step does not build — the network, the cluster and the deployment pipeline that it does build are legible in the Terraform and in a verification record of the kind `docs/step8-9d-evidence.md` already sets a precedent for. Keeping the cluster ephemeral also keeps `POST /chat` off the open internet, which matters while it has no authentication, no rate limit and no request deadline (`chat-request-deadline` is still a proposal).
 
@@ -143,7 +147,89 @@ Two proposals, neither designed or scheduled yet — noted here for later.
 
 ---
 
-## Step 11: Port to AWS (EKS)
+## Step 11: Private Networking — VNet, Private Endpoints, Private DNS, TLS
+
+Not designed or scheduled yet — noted here for later.
+
+**Why.** Step 9 keeps the workload off the public internet at the ingress layer only: the Gateway sits on an internal load balancer (`design.md` D2) and carries plain HTTP (D15). Everything underneath is left to Azure's defaults — the cluster has no explicit `network_profile` and no VNet this repository owns, and the registry and Key Vault are reached over their public endpoints. The network layer is the one part of the Azure design that is currently implicit rather than decided.
+
+Scope:
+
+- A Terraform-managed VNet with dedicated subnets (nodes, private endpoints, and a delegated subnet reserved for Step 14), with the AKS cluster placed in it on Azure CNI Overlay.
+- Private endpoints for Key Vault and the container registry, with Private DNS Zones (`privatelink.vaultcore.azure.net`, `privatelink.azurecr.io`) linked to the VNet, and public network access disabled on both.
+- TLS on the Gateway listeners — cert-manager, or a certificate held in Key Vault — revisiting D15.
+- A cost check first: ACR private endpoints require the **Premium** SKU, which the current Basic registry (D4) does not support. This decision belongs in the design, not in the apply.
+- Verification in the same style as `docs/step9-raise-evidence.md`: DNS inside the cluster resolves the vault and registry to private IPs, and the public endpoints refuse connections.
+
+Placement matters for the two-layer split (D10): a VNet the persistent platform layer depends on (private endpoints) cannot live in the cluster resource group that is destroyed on every teardown.
+
+---
+
+## Step 12: IaC Quality Gates + Remote Terraform State
+
+Not designed or scheduled yet — noted here for later.
+
+**Why.** The CI pipeline verifies application code, container images and the Helm chart, but not the Terraform. Both states are local (`design.md` D10), which suits one operator but gives no locking and no shared source of truth.
+
+Scope:
+
+- A `terraform` CI job, path-filtered on `Infrastructure/terraform/**` like the existing jobs: `terraform fmt -check`, `terraform validate`, `tflint`, and a static security scan (`checkov` or `trivy config`).
+- `terraform plan` on pull requests, with the plan posted to the PR, authenticated through the existing OIDC federation (D4) rather than a stored secret.
+- Remote state in an Azure Storage account (`azurerm` backend, blob lease locking), created once, outside both states it serves.
+- Commit `Infrastructure/terraform/cluster/.terraform.lock.hcl` — currently only the platform state's lock file is tracked.
+
+---
+
+## Step 13: Container Image and Helm Chart Hardening
+
+Not designed or scheduled yet — noted here for later.
+
+**Why.** The images and the chart are correct but minimal: both images run as root and are single-stage, Trivy findings never fail the build (`exit-code: '0'`), and the chart hardcodes resource names.
+
+Scope:
+
+- Images: non-root user, multi-stage builds, and Next.js `output: "standalone"` for a smaller frontend runtime image.
+- Trivy: fail the build on `CRITICAL` findings once the current baseline is triaged.
+- Chart: pod and container `securityContext` (`runAsNonRoot`, `readOnlyRootFilesystem` where possible, dropped capabilities), a default-deny `NetworkPolicy` with explicit allows, `_helpers.tpl` for release-scoped names and labels, and `helm lint` in the `chart-lint` job.
+- Deploy: `helm upgrade --install --atomic --wait` so a failed rollout reverts on its own.
+- Supply chain: pin third-party actions to commit SHAs, pin `kubelogin` to a version instead of `latest`, and install CRDs in `chart-lint` from a release tag instead of a `main`-branch URL.
+- RBAC: revisit CI's temporary "Azure Kubernetes Service RBAC Cluster Admin" role (`Infrastructure/terraform/cluster/role-assignments.tf`, `design.md` D4) — replace it with a namespace-scoped custom role or Kubernetes RBAC covering only the chart's objects and CRDs, verified with `kubectl auth can-i`.
+
+---
+
+## Step 14: Managed Data Service — Save & Export a Trip Plan as PDF
+
+Not designed or scheduled yet — noted here for later.
+
+**Why.** Everything the workload stores today lives on a single `ReadWriteOnce` PVC (ChromaDB), which is also why the backend Deployment uses the `Recreate` strategy. There is no managed data service in the architecture, and no data path that exercises the private networking from Step 11. Rather than picking Postgres or Blob in isolation, this step is one feature that needs both: save a conversation and its trip plan, and export it as a PDF.
+
+**Architecture (decided):**
+
+- **PostgreSQL Flexible Server**, private access on Step 11's delegated subnet — sessions, messages, trip plans, PDF metadata. Microsoft Entra ID authentication via the backend's existing user-assigned identity (`Infrastructure/terraform/platform/identities.tf`, `azurerm_user_assigned_identity.backend`) — no database password anywhere.
+- **Blob Storage** behind a private endpoint holds the generated PDFs. Never publicly reachable.
+- **Download path:** the backend reads the PDF from Blob and streams it back to the browser (`Content-Type: application/pdf`). The browser never touches Blob directly.
+- **Rejected: a user-delegation SAS URL.** That would require the browser to reach Blob directly, which contradicts the private endpoint and the no-public-exposure stance `design.md` D2/D15 already takes. It also only pays off for large files, and a trip-plan PDF is small. Revisit if file sizes grow.
+- Users are identified by an anonymous, high-entropy session ID cookie. No login, no user accounts, no Entra ID for end users.
+- Schema migrations with Alembic, run as a Helm pre-upgrade hook Job, so the schema is updated before the new application image starts.
+
+**Security constraints**, recorded here because this feature widens the blast radius of an app-level bug:
+
+- The database role the backend uses gets only the privileges this feature needs on its own tables — no superuser, no DDL at runtime.
+- Parameterized queries only (SQLAlchemy); no string-built SQL.
+- Write-then-record ordering: confirm the Blob write succeeded before recording the PDF in Postgres, so there is no row pointing at a file that doesn't exist.
+
+**Open decisions, not decided here:**
+
+- Which Terraform layer the database belongs to, given the cluster layer is destroyed every session. A stopped Flexible Server auto-starts after 7 days, so "stop it between sessions" is not a zero-cost option.
+- Retention period for stored conversations (GDPR).
+- Backup/restore: verify point-in-time restore once and record the evidence, in the style of `docs/step9-raise-evidence.md`.
+- **Cost.** Rough per-unit prices only, not a costed design — from the Azure Retail Prices API, `germanywestcentral`, read 2026-09-23: smallest Burstable compute (`B1MS`, 1 vCore/2 GiB) ≈ $0.0199/hour (≈$14.53/month at 730 hours); Postgres Flexible Server storage ≈ $0.137/GB-month; Blob Hot LRS storage ≈ $0.0196/GB-month. Neither a storage size nor Step 11's own private-endpoint charge (≈$0.01/hour each) is factored into these figures yet — this is an estimate for sizing conversation, not a billed figure.
+
+Step 11 comes first either way: the point is the private data path, not the service itself.
+
+---
+
+## Step 15: Port to AWS (EKS)
 
 Take the Step 9 workload to EKS. The Kubernetes manifests should cross unchanged; the Terraform, the identity model, the registry and the log sink will not.
 
