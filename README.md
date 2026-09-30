@@ -209,7 +209,7 @@ This project was built with AI assistance (Claude Code and Claude Desktop), usin
 
 Two examples of decisions I made:
 
-- **Deploy only through CI.** Helm releases go out from the GitHub Actions `push` job over OIDC, never from my own machine, so whatever runs in the cluster always corresponds to a commit. That job now runs only on a merge into `release`, so `main` stays green while no cluster is raised. That choice is also what exposed a least-privilege gap: creating the chart's CRD objects (`Gateway`, `HTTPRoute`, `SecretProviderClass`) needs a role no built-in Azure role below Cluster Admin provides. I accepted Cluster Admin for CI as a documented, temporary deviation rather than falling back to manual deploys.
+- **Deploy only through CI.** Helm releases go out from the GitHub Actions `push` job over OIDC, never from my own machine, so whatever runs in the cluster always corresponds to a commit. That choice is also what exposed a least-privilege gap: creating the chart's CRD objects (`Gateway`, `HTTPRoute`, `SecretProviderClass`) needs a role no built-in Azure role below Cluster Admin provides. I accepted Cluster Admin for CI as a documented, temporary deviation rather than falling back to manual deploys. That job now runs only on a merge into `release`, so `main` stays green while no cluster is raised.
 - **Mock MCP servers first.** Commercial flight and hotel APIs are paid, so the flight and hotel MCP servers start with mock data, while weather uses the free Open-Meteo API live. Each tool lives in its own MCP server module behind a fixed function signature, so replacing a mock with a real API later is a change inside that one module, not to the agent graph.
 
 ## Documentation Map

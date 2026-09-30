@@ -4,11 +4,15 @@ Evidence record for `openspec/changes/step10-release-branch-deploy`. Tasks 7.1�
 (Migration Plan steps 1–3: merge, plan, apply) are recorded here as they happen, in
 the same style as `docs/step9-raise-evidence.md`.
 
+<a id="task-7-1"></a>
+
 ## Task 7.1 — `main` no longer deploys
 
 Run: <MAIN_RUN_URL>
 
 The `push` job shows `skipped`.
+
+<a id="task-7-2"></a>
 
 ## Task 7.2 — Platform plan, and drift found on the way
 
@@ -53,6 +57,8 @@ expected diff (design.md's Migration Plan step 2):
 Plan: 1 to add, 0 to change, 2 to destroy.
 ```
 
+<a id="task-7-3"></a>
+
 ## Task 7.3 — Apply
 
 ```
@@ -70,9 +76,13 @@ The CI identity itself (`azurerm_user_assigned_identity.ci`) was not replaced �
 only the federated credential naming it was — so its client ID, and the
 `AZURE_CLIENT_ID` repository variable that carries it, are unchanged.
 
+<a id="task-8-1"></a>
+
 ## Task 8.1 — `main`-into-`release` pull request
 
 PR #23, merged with a merge commit. The `push` job did not run on the PR.
+
+<a id="task-8-2-first"></a>
 
 ## Task 8.2 — First deploy attempt: no cluster raised (design.md D5 observed)
 
@@ -103,6 +113,8 @@ Plan: 1 to add, 0 to change, 0 to destroy.
 ```
 
 `az aks show` reported `provisioningState`: `Succeeded`.
+
+<a id="task-8-2-second"></a>
 
 ## Task 8.2 — Second attempt: cluster raised
 

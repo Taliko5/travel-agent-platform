@@ -211,7 +211,7 @@ volumeMounts:
 
 The backend pod was deliberately deleted mid-session, and the same question was asked before and after (*"What local food should I try in Riga, and what is the best time to visit?"*). Both answers contained the same six facts from the Riga guide in the RAG corpus (`backend/rag/data/riga.txt`); only the wording differed, since the model has no `temperature=0` set. Full record: [Task 9.7](step9-raise-evidence.md#task-9-7).
 
-**Direct check:** the first pod's `rag-ingest` log read "Saved 4 documents to Chroma at rag/chroma_db"; after deleting that pod, the replacement's `rag-ingest` log read "Chroma store at rag/chroma_db already has documents, skipping ingestion" — the PVC's data, not a fresh ingest, is what the replacement pod found. Full record: [`docs/step10-evidence.md`](step10-evidence.md#task-8-2-second-attempt-cluster-raised).
+**Direct check:** the first pod's `rag-ingest` log read "Saved 4 documents to Chroma at rag/chroma_db"; after deleting that pod, the replacement's `rag-ingest` log read "Chroma store at rag/chroma_db already has documents, skipping ingestion" — the PVC's data, not a fresh ingest, is what the replacement pod found. Full record: [`docs/step10-evidence.md`](step10-evidence.md#task-8-2-second).
 
 **Deleting the backend pod:** Kubernetes starts a replacement, which is `Running` within seconds.
 
