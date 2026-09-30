@@ -35,9 +35,9 @@ variable "github_repository" {
 }
 
 variable "ci_deploy_branch" {
-  description = "Branch the CI federated credential trusts — must match the push job's gate (design.md D4: github.ref == 'refs/heads/main')."
+  description = "Branch the CI federated credential trusts — must match the push job's gate (step10-release-branch-deploy design.md D3: github.ref == 'refs/heads/release')."
   type        = string
-  default     = "main"
+  default     = "release"
 }
 
 variable "backend_namespace" {
