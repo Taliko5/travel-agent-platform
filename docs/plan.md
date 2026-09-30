@@ -140,9 +140,9 @@ Prerequisites: Steps 5 and 7 complete (Docker images, CI). Two pieces of earlier
 
 ## Step 10: CI Branch Separation & Browser-Triggered Cluster Launch
 
-Two proposals, neither designed or scheduled yet — noted here for later.
+Two proposals. The first is in progress; the second is neither designed nor scheduled yet — noted here for later.
 
-**Separate `main` from a `release` branch.** `main` would stay integration-only (tests, build, push images to the registry); merging into `release` is what would trigger the actual `helm upgrade --install` deploy. The current single `push` job conflates "did the code merge cleanly" with "deploy this to whatever cluster happens to be raised right now" — surfaced concretely in `openspec/changes/step9-aks-deployment/tasks.md` task 10.4, where the deploy step failed simply because no cluster was raised at the time, which a merge to `main` alone can't distinguish from an actual regression.
+**Separate `main` from a `release` branch — in progress.** `main` runs tests, builds, and scans only; both image publishing and the deploy run on `release` instead (step10 `design.md` D1). The current single `push` job conflates "did the code merge cleanly" with "deploy this to whatever cluster happens to be raised right now" — surfaced concretely in `openspec/changes/archive/2026-09-30-step9-aks-deployment/tasks.md` task 10.4, where the deploy step failed simply because no cluster was raised at the time, which a merge to `main` alone can't distinguish from an actual regression. Design and tasks: [`openspec/changes/step10-release-branch-deploy/`](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/step10-release-branch-deploy/proposal.md) — which goes beyond this paragraph's original scope by also gating deploy success on workload readiness and pinning the deploy tooling's versions.
 
 **Trigger a cluster raise/teardown from a browser.** A GitHub Actions `workflow_dispatch` button, or similar, rather than requiring the operator to run Terraform/`az` commands by hand in Cloud Shell every time.
 
@@ -197,8 +197,8 @@ Scope:
 - Images: non-root user, multi-stage builds, and Next.js `output: "standalone"` for a smaller frontend runtime image.
 - Trivy: fail the build on `CRITICAL` findings once the current baseline is triaged.
 - Chart: pod and container `securityContext` (`runAsNonRoot`, `readOnlyRootFilesystem` where possible, dropped capabilities), a default-deny `NetworkPolicy` with explicit allows, `_helpers.tpl` for release-scoped names and labels, and `helm lint` in the `chart-lint` job.
-- Deploy: `helm upgrade --install --atomic --wait` so a failed rollout reverts on its own.
-- Supply chain: pin third-party actions to commit SHAs, pin `kubelogin` to a version instead of `latest`, and install CRDs in `chart-lint` from a release tag instead of a `main`-branch URL.
+- Deploy: `--wait` is now delivered by [`step10-release-branch-deploy`](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/step10-release-branch-deploy/proposal.md); `--atomic` was rejected there (see that change's `proposal.md` Non-Goals) and should be revisited here only together with a way to keep diagnostics on a failed rollout, since `--atomic` removes failed pods before they can be diagnosed. Helm 4 has no `--atomic`; its equivalent is `--rollback-on-failure`.
+- Supply chain: the `kubelogin` pin and the new Helm pin are now delivered by `step10-release-branch-deploy`; pinning third-party actions to commit SHAs and installing CRDs in `chart-lint` from a release tag stay in Step 13.
 - RBAC: revisit CI's temporary "Azure Kubernetes Service RBAC Cluster Admin" role (`Infrastructure/terraform/cluster/role-assignments.tf`, `design.md` D4) — replace it with a namespace-scoped custom role or Kubernetes RBAC covering only the chart's objects and CRDs, verified with `kubectl auth can-i`.
 
 ---
