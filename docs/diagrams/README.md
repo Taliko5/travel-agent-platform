@@ -7,6 +7,8 @@ rendered `.svg` beside it. The `.svg` is what gets embedded — GitHub renders f
 places.
 
 - `architecture-current.mmd` / `.svg` — what's deployed today (Step 9).
+- `architecture-k8s-request.mmd` / `.svg` — inside the cluster: request path through the Gateway, Services and Deployments, and the backend's persistent volume.
+- `architecture-k8s-secrets.mmd` / `.svg` — inside the cluster: how `GOOGLE_API_KEY` travels from Key Vault to the backend (Workload Identity + Secrets Store CSI driver).
 - `architecture-planned.mmd` / `.svg` — the target state tracked by
   `docs/plan.md` Steps 11–14. Not deployed. Styled distinctly (dashed orange
   borders, a warning banner) so it can't be mistaken for the current diagram.
@@ -20,6 +22,8 @@ Requires Node 18+ (the `@mermaid-js/mermaid-cli` package needs it; this repo's o
 nvm use 24   # or any Node 18+
 npx --yes @mermaid-js/mermaid-cli -i docs/diagrams/<name>.mmd -o docs/diagrams/<name>.svg -b white
 ```
+
+Render with mermaid-cli 11 (`npx --yes @mermaid-js/mermaid-cli@11 ...`) so new diagrams match the existing ones; version 12 switches to a different default font and look.
 
 The `-b white` flag is not optional — it's what gives the SVG its explicit light
 background (`background-color: white` on the root `<svg>` element). Without it the

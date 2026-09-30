@@ -1,0 +1,38 @@
+flowchart LR
+    Operator["Operator's machine<br/>kubectl port-forward"]
+    API["Kubernetes API server<br/>(Entra ID auth)"]
+
+    subgraph NS["AKS · namespace default · Helm release travel-agent"]
+        direction LR
+        GW["Gateway<br/>travel-agent-gateway<br/>class approuting-istio · HTTP :80"]
+        GWPOD["Istio gateway pods<br/>+ internal LB Service<br/>(no public IP)"]
+
+        RF["HTTPRoute<br/>travel-agent.internal"]
+        SF["Service ClusterIP<br/>:80 → 3000"]
+        FE["Deployment frontend<br/>1 replica · Next.js"]
+
+        RB["HTTPRoute<br/>api.travel-agent.internal"]
+        SB["Service ClusterIP<br/>:80 → 8000"]
+
+        subgraph BEPOD["Deployment backend · 1 replica · Recreate"]
+            direction TB
+            INIT["initContainer rag-ingest<br/>ingests RAG docs,<br/>skips if already present"]
+            BE["container backend<br/>FastAPI + LangGraph<br/>tools called in-process"]
+        end
+
+        PVC[("PVC travel-agent-chroma-db<br/>ReadWriteOnce · 1Gi<br/>ChromaDB")]
+    end
+
+    DISK["Azure managed disk"]
+    GEM["Google Gemini API"]
+    OM["Open-Meteo API"]
+
+    Operator -->|tunnel| API --> GWPOD
+    GW -.->|provisions| GWPOD
+    GWPOD --> RF --> SF --> FE
+    GWPOD --> RB --> SB --> BE
+    INIT --> PVC
+    BE --> PVC
+    PVC -.-> DISK
+    BE --> GEM
+    BE --> OM
