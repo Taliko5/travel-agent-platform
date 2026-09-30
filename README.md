@@ -16,6 +16,20 @@ This is the chat UI running against the real backend, reached through `kubectl p
 
 Diagram source: [`docs/diagrams/architecture-current.mmd`](docs/diagrams/architecture-current.mmd).
 
+### Inside the Cluster
+
+Everything the Helm chart deploys lives in the `default` namespace. Traffic enters only through the Gateway, which the AKS app-routing add-on turns into Istio gateway pods behind an internal load balancer; each HTTPRoute sends one hostname to one ClusterIP Service.
+
+**Request path and storage** — from the operator's tunnel through the Gateway to the frontend and backend, and the backend's ChromaDB data on a persistent volume.
+
+<img src="docs/diagrams/architecture-k8s-request.svg" alt="Inside the cluster: the operator's tunnel goes through the API server to the Istio gateway pods; HTTPRoutes send each hostname to a ClusterIP Service in front of the frontend and backend Deployments; the backend's initContainer and container share a ReadWriteOnce PVC backed by an Azure managed disk; the backend calls Gemini and Open-Meteo">
+
+**Secret delivery** — how `GOOGLE_API_KEY` reaches the backend without a stored password: the pod's Kubernetes identity is exchanged for Entra ID access to Key Vault.
+
+<img src="docs/diagrams/architecture-k8s-secrets.svg" alt="Secret delivery: the Workload Identity webhook injects a service-account token into the backend pod; the Secrets Store CSI driver exchanges it with Entra ID for an access token, reads google-api-key from Key Vault, and syncs a Kubernetes Secret that becomes the GOOGLE_API_KEY environment variable">
+
+Diagram sources: [`docs/diagrams/architecture-k8s-request.mmd`](docs/diagrams/architecture-k8s-request.mmd), [`docs/diagrams/architecture-k8s-secrets.mmd`](docs/diagrams/architecture-k8s-secrets.mmd).
+
 ### Planned Architecture (Steps 11–14)
 
 This is the planned target state tracked by [`docs/plan.md`](docs/plan.md) Steps 11–14 — **not what's deployed today**. See the diagram above for the current, actually-deployed architecture.

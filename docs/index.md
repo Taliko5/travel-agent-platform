@@ -33,6 +33,10 @@
   box-shadow: 0 0 40px rgba(0,0,0,0.6);
   border-radius: 4px;
 }
+.lightbox-overlay img.lightbox-svg {
+  width: 92vw;
+  height: auto;
+}
 </style>
 
 An AI travel-planning agent built on LangGraph, RAG (ChromaDB), and tools written as MCP servers, taken from local Docker Compose development through GitHub Actions CI/CD to a production-realistic Azure Kubernetes Service (AKS) deployment. Built on an Azure Free Trial subscription, whose 4-vCPU regional quota forced a real sizing deviation (see "What Went Wrong"). Every non-trivial decision is recorded as it was made, and every claim on this page is sourced from the evidence log or the infrastructure code linked next to it.
@@ -50,11 +54,26 @@ An AI travel-planning agent built on LangGraph, RAG (ChromaDB), and tools writte
 
 **Current architecture:** what is deployed today.
 
-<img src="diagrams/architecture-current.svg" alt="Current architecture: GitHub Actions builds and tests the app, then pushes images to Azure Container Registry over OIDC with no stored secrets, and deploys via helm upgrade to AKS. Inside AKS, an internal-only Istio Gateway (no public IP) routes to the Next.js frontend and the FastAPI/LangGraph backend. The backend reads from a ChromaDB RAG store, calls three MCP tool servers (weather, flights, hotels), and reads GOOGLE_API_KEY from Azure Key Vault via Workload Identity. An operator reaches the Gateway only through kubectl port-forward. Managed Prometheus scrapes both the frontend and backend.">
+<div class="lightbox-overlay" id="lb-architecture"><a href="#" class="lightbox-overlay-bg"><img class="lightbox-svg" src="diagrams/architecture-current.svg" alt="Current architecture: GitHub Actions builds and tests the app, then pushes images to Azure Container Registry over OIDC with no stored secrets, and deploys via helm upgrade to AKS. Inside AKS, an internal-only Istio Gateway (no public IP) routes to the Next.js frontend and the FastAPI/LangGraph backend. The backend reads from a ChromaDB RAG store, calls three MCP tool servers (weather, flights, hotels), and reads GOOGLE_API_KEY from Azure Key Vault via Workload Identity. An operator reaches the Gateway only through kubectl port-forward. Managed Prometheus scrapes both the frontend and backend."></a></div>
+<a href="#lb-architecture" class="lightbox-link"><img src="diagrams/architecture-current.svg" alt="Current architecture: GitHub Actions builds and tests the app, then pushes images to Azure Container Registry over OIDC with no stored secrets, and deploys via helm upgrade to AKS. Inside AKS, an internal-only Istio Gateway (no public IP) routes to the Next.js frontend and the FastAPI/LangGraph backend. The backend reads from a ChromaDB RAG store, calls three MCP tool servers (weather, flights, hotels), and reads GOOGLE_API_KEY from Azure Key Vault via Workload Identity. An operator reaches the Gateway only through kubectl port-forward. Managed Prometheus scrapes both the frontend and backend."></a>
 
 The Istio-based Gateway API implementation of the AKS application-routing add-on was chosen as the ingress over managed NGINX (its Azure security-patch support ends within months and its upstream project is already unmaintained) and over Application Gateway for Containers (its extra capabilities — mTLS to backends, weighted traffic splitting — aren't needed here, and it adds a separately-billed, separately-lifecycled resource), per [`design.md` D2](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/step9-aks-deployment/design.md).
 
 **How the agent works.** Each question is classified by intent and routed either to a tool (weather, flights, hotels) or to RAG retrieval, and the answer is generated from the result. The tools are written as MCP servers (FastMCP) and can run on their own, but in this deployment the agent imports them and calls them in-process as plain functions — the MCP protocol isn't used at runtime. Weather is live data from Open-Meteo; flights and hotels return mock data. Running the tools as real MCP services is tracked in [`docs/plan.md` Step 15](plan.md).
+
+### Inside the cluster
+
+Everything the Helm chart deploys lives in the `default` namespace. Traffic enters only through the Gateway, which the AKS app-routing add-on turns into Istio gateway pods behind an internal load balancer; each HTTPRoute sends one hostname to one ClusterIP Service.
+
+**Request path and storage:** from the operator's tunnel through the Gateway to the frontend and backend, and the backend's ChromaDB data on a persistent volume.
+
+<div class="lightbox-overlay" id="lb-k8s-request"><a href="#" class="lightbox-overlay-bg"><img class="lightbox-svg" src="diagrams/architecture-k8s-request.svg" alt="Inside the cluster: the operator's tunnel goes through the API server to the Istio gateway pods; HTTPRoutes send each hostname to a ClusterIP Service in front of the frontend and backend Deployments; the backend's initContainer and container share a ReadWriteOnce PVC backed by an Azure managed disk; the backend calls Gemini and Open-Meteo"></a></div>
+<a href="#lb-k8s-request" class="lightbox-link"><img src="diagrams/architecture-k8s-request.svg" alt="Inside the cluster: the operator's tunnel goes through the API server to the Istio gateway pods; HTTPRoutes send each hostname to a ClusterIP Service in front of the frontend and backend Deployments; the backend's initContainer and container share a ReadWriteOnce PVC backed by an Azure managed disk; the backend calls Gemini and Open-Meteo"></a>
+
+**Secret delivery:** how `GOOGLE_API_KEY` reaches the backend without a stored password — the pod's Kubernetes identity is exchanged for Entra ID access to Key Vault.
+
+<div class="lightbox-overlay" id="lb-k8s-secrets"><a href="#" class="lightbox-overlay-bg"><img class="lightbox-svg" src="diagrams/architecture-k8s-secrets.svg" alt="Secret delivery: the Workload Identity webhook injects a service-account token into the backend pod; the Secrets Store CSI driver exchanges it with Entra ID for an access token, reads google-api-key from Key Vault, and syncs a Kubernetes Secret that becomes the GOOGLE_API_KEY environment variable"></a></div>
+<a href="#lb-k8s-secrets" class="lightbox-link"><img src="diagrams/architecture-k8s-secrets.svg" alt="Secret delivery: the Workload Identity webhook injects a service-account token into the backend pod; the Secrets Store CSI driver exchanges it with Entra ID for an access token, reads google-api-key from Key Vault, and syncs a Kubernetes Secret that becomes the GOOGLE_API_KEY environment variable"></a>
 
 ## Why AKS
 
