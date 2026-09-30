@@ -1,6 +1,6 @@
 # Step 9 — Raise Evidence
 
-Evidence record for `openspec/changes/step9-aks-deployment`. Section 7 (Pre-Apply
+Evidence record for `openspec/changes/archive/2026-09-30-step9-aks-deployment`. Section 7 (Pre-Apply
 Gate) requires the go-ahead for each specific raise to be recorded here, before
 anything in Section 8 runs. Section 9's 15 verification tasks may be completed
 incrementally across multiple raise/teardown cycles (tasks.md Section 7.5); each

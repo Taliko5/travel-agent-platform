@@ -48,7 +48,7 @@ An AI travel-planning agent built on LangGraph, RAG (ChromaDB), and tools writte
 <div class="lightbox-overlay" id="lb-chat-demo"><a href="#" class="lightbox-overlay-bg"><img src="demo/chat-demo.gif" alt="Chat demo: a travel question answered by the agent"></a></div>
 <a href="#lb-chat-demo" class="lightbox-link"><img src="demo/chat-demo.gif" alt="Chat demo: a travel question answered by the agent"></a>
 
-[Full repository](https://github.com/Taliko5/travel-agent-platform) — the complete decision log lives in [`design.md`](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/step9-aks-deployment/design.md), and verification evidence lives in [`step9-raise-evidence.md`](https://github.com/Taliko5/travel-agent-platform/blob/main/docs/step9-raise-evidence.md).
+[Full repository](https://github.com/Taliko5/travel-agent-platform) — the complete decision log lives in [`design.md`](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/archive/2026-09-30-step9-aks-deployment/design.md), and verification evidence lives in [`step9-raise-evidence.md`](https://github.com/Taliko5/travel-agent-platform/blob/main/docs/step9-raise-evidence.md).
 
 ## Architecture
 
@@ -57,7 +57,7 @@ An AI travel-planning agent built on LangGraph, RAG (ChromaDB), and tools writte
 <div class="lightbox-overlay" id="lb-architecture"><a href="#" class="lightbox-overlay-bg"><img class="lightbox-svg" src="diagrams/architecture-current.svg" alt="Current architecture: GitHub Actions builds and tests the app, then pushes images to Azure Container Registry over OIDC with no stored secrets, and deploys via helm upgrade to AKS. Inside AKS, an internal-only Istio Gateway (no public IP) routes to the Next.js frontend and the FastAPI/LangGraph backend. The backend reads from a ChromaDB RAG store, calls three MCP tool servers (weather, flights, hotels), and reads GOOGLE_API_KEY from Azure Key Vault via Workload Identity. An operator reaches the Gateway only through kubectl port-forward. Managed Prometheus scrapes both the frontend and backend."></a></div>
 <a href="#lb-architecture" class="lightbox-link"><img src="diagrams/architecture-current.svg" alt="Current architecture: GitHub Actions builds and tests the app, then pushes images to Azure Container Registry over OIDC with no stored secrets, and deploys via helm upgrade to AKS. Inside AKS, an internal-only Istio Gateway (no public IP) routes to the Next.js frontend and the FastAPI/LangGraph backend. The backend reads from a ChromaDB RAG store, calls three MCP tool servers (weather, flights, hotels), and reads GOOGLE_API_KEY from Azure Key Vault via Workload Identity. An operator reaches the Gateway only through kubectl port-forward. Managed Prometheus scrapes both the frontend and backend."></a>
 
-The Istio-based Gateway API implementation of the AKS application-routing add-on was chosen as the ingress over managed NGINX (its Azure security-patch support ends within months and its upstream project is already unmaintained) and over Application Gateway for Containers (its extra capabilities — mTLS to backends, weighted traffic splitting — aren't needed here, and it adds a separately-billed, separately-lifecycled resource), per [`design.md` D2](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/step9-aks-deployment/design.md).
+The Istio-based Gateway API implementation of the AKS application-routing add-on was chosen as the ingress over managed NGINX (its Azure security-patch support ends within months and its upstream project is already unmaintained) and over Application Gateway for Containers (its extra capabilities — mTLS to backends, weighted traffic splitting — aren't needed here, and it adds a separately-billed, separately-lifecycled resource), per [`design.md` D2](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/archive/2026-09-30-step9-aks-deployment/design.md).
 
 **How the agent works.** Each question is classified by intent and routed either to a tool (weather, flights, hotels) or to RAG retrieval, and the answer is generated from the result. The tools are written as MCP servers (FastMCP) and can run on their own, but in this deployment the agent imports them and calls them in-process as plain functions — the MCP protocol isn't used at runtime. Weather is live data from Open-Meteo; flights and hotels return mock data. Running the tools as real MCP services is tracked in [`docs/plan.md` Step 15](plan.md).
 
@@ -89,8 +89,8 @@ The numbers that matter for a cluster that only exists while it's being used: wh
 
 | Metric | Value | Source |
 |---|---|---|
-| Cost while the cluster is up | ≈$0.365/hour (2× `Standard_D2s_v7` node + disk + load balancer + IP) | [`design.md` D14](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/step9-aks-deployment/design.md) |
-| Standing cost after teardown | ≈$5/month (ACR alone; everything else is free at rest) | [`design.md` D10](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/step9-aks-deployment/design.md) |
+| Cost while the cluster is up | ≈$0.365/hour (2× `Standard_D2s_v7` node + disk + load balancer + IP) | [`design.md` D14](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/archive/2026-09-30-step9-aks-deployment/design.md) |
+| Standing cost after teardown | ≈$5/month (ACR alone; everything else is free at rest) | [`design.md` D10](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/archive/2026-09-30-step9-aks-deployment/design.md) |
 | Key Vault access restored → pod Ready | ~1.5 minutes | [Task 9.15](step9-raise-evidence.md#task-9-15) |
 | Active Prometheus time series vs. workspace limit | ~7,494 of 1,000,000 (0.75%) | [Task 9.12](step9-raise-evidence.md#task-9-12) |
 | Events ingested/min vs. workspace limit | ~13,700–18,818 of 1,000,000 (1.4–1.9%) | [Task 9.12](step9-raise-evidence.md#task-9-12) |
@@ -108,6 +108,8 @@ The pipeline (`.github/workflows/ci.yml`) runs on every push and pull request to
 | `build-backend` / `build-frontend` | After `test` / `frontend`, when that side changed | Builds the Docker image and scans it with Trivy (results are uploaded; findings don't fail the build yet — see Step 13) |
 | `chart-lint` | Helm chart changed | Renders the chart and client-side dry-run applies it to a throwaway `kind` cluster with the Gateway API and Secrets Store CSI CRDs installed |
 | `push` | Push to `release` only, after both build jobs | OIDC login to Azure, builds and pushes both images to ACR, then deploys to AKS with `helm upgrade --install` |
+
+A deploy happens when a pull request from `main` is merged into `release`. The deploy step waits for the workload to become ready and dumps diagnostics to the job log if it doesn't; a merge while no cluster is raised fails by design rather than passing silently. Full record: [`docs/step10-evidence.md`](step10-evidence.md), [`openspec/changes/step10-release-branch-deploy/`](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/step10-release-branch-deploy/proposal.md).
 
 CI holds no long-lived Azure secrets at all. It authenticates via OIDC federation, requesting a short-lived token on each run to push to ACR and deploy to AKS.
 
@@ -137,7 +139,7 @@ Apply complete! Resources: 0 added, 1 changed, 0 destroyed.
 
 `terraform output backend_federated_credential_configured` → `true` confirms it. Full record: [Task 8.6.1](step9-raise-evidence.md#task-8-6-1).
 
-**Deploying from CI:** every job green, and the `push` job's `helm upgrade --install` step installing the release on a freshly raised cluster (`STATUS: deployed`, `Install complete`).
+**Deploying from CI:** every job green, and the `push` job's `helm upgrade --install` step installing the release on a freshly raised cluster (`STATUS: deployed`, `Install complete`). This screenshot dates from Step 9, when the `push` job still ran on `main`.
 
 <div class="lightbox-overlay" id="lb-ci-helm"><a href="#" class="lightbox-overlay-bg"><img src="evidence/88a-ci-helm-deploy.png" alt="GitHub Actions push job: all jobs green, Deploy with Helm step showing the release installed"></a></div>
 <a href="#lb-ci-helm" class="lightbox-link"><img src="evidence/88a-ci-helm-deploy.png" alt="GitHub Actions push job: all jobs green, Deploy with Helm step showing the release installed"></a>
@@ -209,7 +211,7 @@ volumeMounts:
 
 The backend pod was deliberately deleted mid-session, and the same question was asked before and after (*"What local food should I try in Riga, and what is the best time to visit?"*). Both answers contained the same six facts from the Riga guide in the RAG corpus (`backend/rag/data/riga.txt`); only the wording differed, since the model has no `temperature=0` set. Full record: [Task 9.7](step9-raise-evidence.md#task-9-7).
 
-**Caveat:** these facts are well known, so this shows the answers stayed consistent, not that they came from the retrieved corpus. A direct check — the `rag-ingest` init container logging that it skipped ingestion because the store already had documents — is planned for the next cluster raise ([`docs/plan.md` Step 10](plan.md)).
+**Direct check:** the first pod's `rag-ingest` log read "Saved 4 documents to Chroma at rag/chroma_db"; after deleting that pod, the replacement's `rag-ingest` log read "Chroma store at rag/chroma_db already has documents, skipping ingestion" — the PVC's data, not a fresh ingest, is what the replacement pod found. Full record: [`docs/step10-evidence.md`](step10-evidence.md#task-8-2-second).
 
 **Deleting the backend pod:** Kubernetes starts a replacement, which is `Running` within seconds.
 
@@ -319,7 +321,7 @@ Full record: [Task 10.4](step9-raise-evidence.md#task-10-4). This is why [`docs/
 Known limitations today, and planned next steps tracked in [`docs/plan.md`](plan.md):
 
 - **Secret rotation isn't hands-off.** `GOOGLE_API_KEY` is read as an environment variable at container start (via `secretKeyRef`), so updating it in Key Vault via `az keyvault secret set` doesn't reach a running pod — `kubectl rollout restart deployment/travel-agent-backend` is required to pick it up.
-- **Single replica by design.** The backend runs one replica with a `ReadWriteOnce` PVC and the `Recreate` update strategy (see `Infrastructure/helm/travel-agent/templates/backend-deployment.yaml`), so a deploy briefly takes the backend down and it can't scale out as-is. See [`design.md` D11](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/step9-aks-deployment/design.md).
+- **Single replica by design.** The backend runs one replica with a `ReadWriteOnce` PVC and the `Recreate` update strategy (see `Infrastructure/helm/travel-agent/templates/backend-deployment.yaml`), so a deploy briefly takes the backend down and it can't scale out as-is. See [`design.md` D11](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/archive/2026-09-30-step9-aks-deployment/design.md).
 - **No cost guardrail in code.** There is no Azure budget alert defined in this repository's Terraform; tearing the cluster down relies on the operator.
 - **Alerting.** No alert rules are defined yet — metrics are collected and queryable, but nothing pages on them. The backend's application metrics are not yet scraped on AKS either.
 - **[Step 11](plan.md): Private networking.** The Gateway carries plain HTTP on an internal load balancer (no TLS), and there are no private endpoints — the registry and Key Vault are reached over their public endpoints today, with no VNet this repository owns.
@@ -331,5 +333,5 @@ Known limitations today, and planned next steps tracked in [`docs/plan.md`](plan
 ## Links
 
 - [Repository](https://github.com/Taliko5/travel-agent-platform)
-- Full decision log: [`design.md`](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/step9-aks-deployment/design.md)
+- Full decision log: [`design.md`](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/archive/2026-09-30-step9-aks-deployment/design.md)
 - Verification evidence: [`step9-raise-evidence.md`](https://github.com/Taliko5/travel-agent-platform/blob/main/docs/step9-raise-evidence.md)
