@@ -18,7 +18,8 @@
 | 12 | IaC quality gates + remote Terraform state | Planned |
 | 13 | Container image and Helm chart hardening | Planned |
 | 14 | Managed data service — save & export a trip plan as PDF (PostgreSQL + Blob) | Planned |
-| 15 | Port to AWS (EKS) | Planned |
+| 15 | Real MCP integration — tool servers over the MCP protocol, real flight/hotel data | Planned |
+| 16 | Port to AWS (EKS) | Planned |
 
 ---
 
@@ -119,7 +120,7 @@ Key metrics: `/chat` latency (p50/p95/p99), intent distribution, LLM call durati
 
 Deploy the containerized stack to Azure Kubernetes Service, with the infrastructure defined in Terraform.
 
-**Why AKS, and not ECS or EKS.** The earlier version of this section offered ECS ("simpler") or EKS ("matches the k8s manifests from Step 5"). The second reason did not survive inspection: `Infrastructure/k8s/` holds two files covering the backend alone, out of the four services `docker-compose.yaml` runs, and every line of them changes on the way to a managed cluster anyway — image reference, secret source, service type. What genuinely carries between clouds is Kubernetes itself: Deployment, Service, Ingress, HPA, probes, `kubectl`. That layer is identical on AKS, EKS and GKE. The layer that does not carry is the cloud-specific one — network, identity, registry, ingress controller, log sink. AKS is a given for this step rather than a conclusion argued here; what is worth recording is that the choice decides only that second layer, and that Step 15 exists to prove the first layer really does move.
+**Why AKS, and not ECS or EKS.** The earlier version of this section offered ECS ("simpler") or EKS ("matches the k8s manifests from Step 5"). The second reason did not survive inspection: `Infrastructure/k8s/` holds two files covering the backend alone, out of the four services `docker-compose.yaml` runs, and every line of them changes on the way to a managed cluster anyway — image reference, secret source, service type. What genuinely carries between clouds is Kubernetes itself: Deployment, Service, Ingress, HPA, probes, `kubectl`. That layer is identical on AKS, EKS and GKE. The layer that does not carry is the cloud-specific one — network, identity, registry, ingress controller, log sink. AKS is a given for this step rather than a conclusion argued here; what is worth recording is that the choice decides only that second layer, and that Step 16 exists to prove the first layer really does move.
 
 **The deliverable is the repository, not a running URL.** This step produces Terraform, manifests and documentation; the cluster is raised on demand and torn down afterwards rather than left running. Writing the Terraform does not finish the step — raising a cluster from it, verifying it, and destroying it does, with the result recorded. Several of the assumptions this step rests on cannot be settled any other way, and the change's design names which ones. A public URL would show the chat UI, which is the one thing this step does not build — the network, the cluster and the deployment pipeline that it does build are legible in the Terraform and in a verification record of the kind `docs/step8-9d-evidence.md` already sets a precedent for. Keeping the cluster ephemeral also keeps `POST /chat` off the open internet, which matters while it has no authentication, no rate limit and no request deadline (`chat-request-deadline` is still a proposal).
 
@@ -144,6 +145,11 @@ Two proposals, neither designed or scheduled yet — noted here for later.
 **Separate `main` from a `release` branch.** `main` would stay integration-only (tests, build, push images to the registry); merging into `release` is what would trigger the actual `helm upgrade --install` deploy. The current single `push` job conflates "did the code merge cleanly" with "deploy this to whatever cluster happens to be raised right now" — surfaced concretely in `openspec/changes/step9-aks-deployment/tasks.md` task 10.4, where the deploy step failed simply because no cluster was raised at the time, which a merge to `main` alone can't distinguish from an actual regression.
 
 **Trigger a cluster raise/teardown from a browser.** A GitHub Actions `workflow_dispatch` button, or similar, rather than requiring the operator to run Terraform/`az` commands by hand in Cloud Shell every time.
+
+**Also do on the next raise, before teardown** (whichever work raises the cluster next):
+
+- Delete the backend pod once, then capture `kubectl logs <new-backend-pod> -c rag-ingest`. It should print that the Chroma store already has documents and ingestion was skipped — direct evidence that the PVC's data survived the pod replacement. Once captured, it replaces the fact-matching table's role in `docs/index.md` ("Data Survives Pod Replacement").
+- Check the node OS disk's actual SKU tier with `az disk list` against the node resource group, per `design.md`'s Open Questions (the tier was never confirmed before the node resource group was destroyed).
 
 ---
 
@@ -229,7 +235,24 @@ Step 11 comes first either way: the point is the private data path, not the serv
 
 ---
 
-## Step 15: Port to AWS (EKS)
+## Step 15: Real MCP Integration
+
+Not designed or scheduled yet — noted here for later.
+
+**Why.** The three tools (weather, flights, hotels) are written as MCP servers with FastMCP, but the agent imports and calls them in-process as plain Python functions, so the MCP protocol is never exercised at runtime. Flights and hotels also return mock data, because commercial flight and hotel APIs are paid.
+
+Scope:
+
+- Run the tool servers as separate services in the cluster (an MCP transport such as Streamable HTTP), and have the agent call them through an MCP client instead of direct imports.
+- Replace the mock flight and hotel data with a real API, or keep the mock data behind the real protocol — the choice (and any cost) is part of the design.
+- Any new API key goes through Key Vault and Workload Identity, like `GOOGLE_API_KEY` (`design.md` D5).
+- A capacity check first: extra pods have to fit the Free Trial's 4-vCPU regional quota (`design.md` D14).
+- Keep the tool services internal to the cluster, with network access limited to the backend (a `NetworkPolicy`, see Step 13).
+- Verification in the same style as `docs/step9-raise-evidence.md`: the agent's tool calls observed going over the protocol, not in-process.
+
+---
+
+## Step 16: Port to AWS (EKS)
 
 Take the Step 9 workload to EKS. The Kubernetes manifests should cross unchanged; the Terraform, the identity model, the registry and the log sink will not.
 

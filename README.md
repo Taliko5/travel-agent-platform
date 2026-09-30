@@ -4,9 +4,9 @@ AI-powered travel planning agent with production-realistic infrastructure.
 
 ## Demo
 
-![Completed chat response for "find the best root to go to London from Berlin", labeled with the transportation intent and listing direct-flight and high-speed-train options with approximate times](docs/demo/chat-response.png)
+<img src="docs/demo/chat-response.png" alt="Completed chat response for &quot;find the best root to go to London from Berlin&quot;, labeled with the transportation intent and listing direct-flight and high-speed-train options with approximate times" width="400">
 
-![Chat UI showing a completed transportation-intent answer for "find the best root to go to London from Berlin" (flight, train, and bus options), with a follow-up question, "Weather in London November", being typed into the input box](docs/demo/chat-demo.gif)
+<img src="docs/demo/chat-demo.gif" alt="Chat UI showing a completed transportation-intent answer for &quot;find the best root to go to London from Berlin&quot; (flight, train, and bus options), with a follow-up question, &quot;Weather in London November&quot;, being typed into the input box" width="400">
 
 This is the chat UI running against the real backend, reached through `kubectl port-forward` — the app has no public endpoint (see `design.md` D2/D15).
 
@@ -39,7 +39,7 @@ Diagram source: [`docs/diagrams/architecture-planned.mmd`](docs/diagrams/archite
 
 - **Backend:** Python, FastAPI, LangGraph, ChromaDB
 - **LLM:** Google Gemini (`gemini-3.5-flash`, `gemini-embedding-001`)
-- **Tools:** MCP servers — weather (live Open-Meteo), flights (mock), hotels (mock)
+- **Tools:** written as MCP servers (FastMCP), called in-process by the agent — weather (live Open-Meteo), flights (mock), hotels (mock)
 - **Infra:** Docker, Kubernetes, GitHub Actions
 - **Testing/Quality:** pytest (backend), Vitest + React Testing Library (frontend), ruff (lint + format), ESLint + Prettier
 
@@ -226,6 +226,7 @@ In short: `CLAUDE.md` tells the agent how to work in the repo *right now*, `docs
 - [ ] Step 12: IaC quality gates + remote Terraform state
 - [ ] Step 13: Container image and Helm chart hardening
 - [ ] Step 14: Managed data service — save & export a trip plan as PDF (PostgreSQL + Blob)
-- [ ] Step 15: Port to AWS (EKS)
+- [ ] Step 15: Real MCP integration — tool servers over the MCP protocol, real flight/hotel data
+- [ ] Step 16: Port to AWS (EKS)
 
 Details and rationale for each planned step: [`docs/plan.md`](docs/plan.md).

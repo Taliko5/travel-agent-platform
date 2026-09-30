@@ -468,7 +468,7 @@ Apply complete! Resources: 11 added, 0 changed, 0 destroyed.
 
 Single attempt, no errors. Task 8.6.1 (platform re-apply) is next.
 
-**Screenshot:** `docs/evidence/86-terraform-apply-complete.png`
+<a id="task-8-6-1"></a>
 
 **Task 8.6.1 — platform re-apply, run in the platform dir.**
 
@@ -489,8 +489,6 @@ Apply complete! Resources: 0 added, 1 changed, 0 destroyed.
 ```
 
 Confirmed: `terraform output backend_federated_credential_configured` → `true`.
-
-**Screenshots:** `docs/evidence/86-1-federated-cred-before.png` (before) and `docs/evidence/86-1-federated-cred-after.png` (after, configured=true)
 
 **Task 9.1 — Capacity.**
 
@@ -732,6 +730,8 @@ Both routes are accepted and resolved by the Gateway's controller (`istio.aks.az
 
 **Screenshot:** `docs/evidence/95-gateway-httproute.png`
 
+<a id="task-9-6"></a>
+
 **Task 9.6 — The entry point is internal.**
 
 The Gateway's own address is task 9.4's already-recorded `kubectl get gateway`/`get svc` output, not repeated here — a private VNet IP, not a public one. This task's own new measurement is proving the one public IP that does exist in the node resource group belongs to something else entirely, not the Gateway.
@@ -753,6 +753,8 @@ $ az network public-ip show -g "$NODE_RG" -n <outbound-public-ip-name> --query "
 Exactly one public IP exists in the node resource group, attached to `loadBalancers/kubernetes` — the AKS-managed outbound LB (SNAT/egress), already accounted for in `design.md`'s cost inventory as non-inbound — not to the Gateway's own (istio-provisioned) LB. Combined with task 9.4's already-recorded Gateway address (private VNet IP), the entry point has no public address anywhere. The only access path is `kubectl port-forward`, per `design.md` D2/D15 — already demonstrated in task 9.4.
 
 **Screenshot:** `docs/evidence/96-no-public-ip.png`
+
+<a id="task-9-7"></a>
 
 **Task 9.7 — Corpus availability.**
 
@@ -822,6 +824,8 @@ $ git diff --stat ce4f8cd c127b2f
 
 `ci.yml`'s `push` job has no path gating, so this still triggered a full rebuild and `helm upgrade --install` — driven only by the new commit SHA, even though nothing but this evidence file changed.
 
+<a id="task-9-10"></a>
+
 **Task 9.10 — Metrics.**
 
 `az account get-access-token --resource https://prometheus.monitor.azure.com` failed (MSI doesn't support that token audience in Cloud Shell), and the suggested `az login --scope` device-code workaround also failed to complete — so these three queries were instead run via the Azure Portal's Monitor workspace (`travel-agent-metrics`) → Managed Prometheus → Prometheus explorer blade, using the Portal's own authenticated session.
@@ -836,7 +840,9 @@ Three queries, each scoped to `namespace="default"`, `container=~"backend|fronte
 
 All three queries returned real, non-zero data scoped to the deployed containers, confirming managed Prometheus is actively collecting cAdvisor metrics for the running backend/frontend pods per `design.md` D8.
 
-**Screenshot:** `docs/evidence/910-azure-monitor-cpu.png`
+**Screenshots:** `docs/evidence/910-azure-monitor-cpu.png` (CPU) and `docs/evidence/910-azure-monitor-memory.png` (memory)
+
+<a id="task-9-11"></a>
 
 **Task 9.11 — Grafana datasource.**
 
@@ -848,7 +854,9 @@ Verified in Explore, against the new datasource:
 
 Existing local `Prometheus` datasource (`prometheus:9090`), its provisioning file, and its history are unchanged — both datasources coexist in the Data sources list.
 
-**Screenshot:** `docs/evidence/911-grafana-datasource.png`
+**Screenshot:** `docs/evidence/911-grafana-explore-azure-prometheus.png`
+
+<a id="task-9-12"></a>
 
 **Task 9.12 — Ingestion volume.**
 
@@ -918,6 +926,8 @@ $ kubectl get pv
 
 **Conclusion:** no StatefulSet, no self-hosted Prometheus/Grafana/Loki-shaped workload, and the cluster's only persistent volume is unrelated to observability. Destroying this cluster destroys no observability history.
 
+<a id="task-9-15"></a>
+
 **Task 9.15 — Grant revocation.**
 
 ```
@@ -939,7 +949,9 @@ $ az role assignment create --assignee <backend-identity-client-id> --role "Key 
 ```
 No further `kubectl` action needed — kubelet was already retrying the failed CSI mount on the same stuck pod automatically. Time from restore command to the pod reaching `Running`/`Ready` (1/1): ~1.5 minutes. Per `design.md` D4, this propagation delay is documented behaviour, not a failure — the measurement recorded here is the delay itself, not a defect.
 
-**Screenshots:** `docs/evidence/915a-keyvault-revoke.png`, `docs/evidence/915b-keyvault-failure.png`, `docs/evidence/915c-keyvault-restore.png`, `docs/evidence/915d-keyvault-recovered.png`
+**Screenshots:** `docs/evidence/915b-keyvault-failure.png` and `docs/evidence/915d-keyvault-recovered.png`
+
+<a id="task-10-1"></a>
 
 **Tasks 10.1/10.2 — Cycle 2 teardown (2026-09-20), reconfirming Cycle 1's 2026-09-16 result.**
 
@@ -1028,6 +1040,8 @@ travelagentnorik1709               cloud-shell-storage-travel  germanywestcentra
 Subscription-wide, exactly the same 4 resources in `travel-agent-platform` that task 10.3 already recorded (ACR, Key Vault, 2 identities), plus `NetworkWatcher_germanywestcentral` and a Cloud Shell storage account — both outside `design.md`'s inventory and outside this project's own resource groups.
 
 This matches `design.md` D10's standing-cost claim: ACR ≈$5/month, everything else ≈$0.
+
+<a id="task-10-4"></a>
 
 **Task 10.4 — Pipeline still publishes after teardown.**
 
