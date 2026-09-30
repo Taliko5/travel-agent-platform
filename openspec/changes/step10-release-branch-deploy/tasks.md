@@ -49,19 +49,19 @@ Each edit below is surgical: one clause or one step, not a rewrite of the job.
 
 ## 7. Merge and Apply (Migration Plan steps 1–3)
 
-- [ ] 7.1 [operator] Merge this change into `main`. Check: the resulting `main` Actions run shows the `push` job as `skipped`.
-- [ ] 7.2 [operator] In `Infrastructure/terraform/platform`, run `terraform plan`. Expected: `azurerm_federated_identity_credential.ci` shows as forcing replacement (name change, D3); `backend_serviceaccount[0]` may additionally show as destroyed, but only if no cluster is currently raised — a pre-existing condition unrelated to this change. **Stop condition**: anything else appearing in the plan (design.md's Migration Plan step 2).
-- [ ] 7.3 [operator] Run `terraform apply` for the platform layer.
+- [x] 7.1 [operator] Merge this change into `main`. Check: the resulting `main` Actions run shows the `push` job as `skipped`. Recorded: `docs/step10-evidence.md` Task 7.1.
+- [x] 7.2 [operator] In `Infrastructure/terraform/platform`, run `terraform plan`. Expected: `azurerm_federated_identity_credential.ci` shows as forcing replacement (name change, D3); `backend_serviceaccount[0]` may additionally show as destroyed, but only if no cluster is currently raised — a pre-existing condition unrelated to this change. **Stop condition**: anything else appearing in the plan (design.md's Migration Plan step 2). Recorded, including unrelated state drift found and fixed along the way: `docs/step10-evidence.md` Task 7.2.
+- [x] 7.3 [operator] Run `terraform apply` for the platform layer. Recorded: `docs/step10-evidence.md` Task 7.3.
 
 Task 7.1 must complete before task 7.3 runs — never the reverse. design.md's Migration Plan explains why: applying first replaces the federated credential to trust `release` while `main`'s still-unmerged `ci.yml` logs in expecting `main`'s trust, so the old workflow's OIDC token presents a subject the replaced credential no longer accepts, breaking `main`'s CI for the gap between the two steps.
 
 ## 8. At the Next Raise (Migration Plan step 4)
 
-- [ ] 8.1 [operator] Open a `main`-into-`release` pull request. Check: it shows CI checks (D2), and the `push` job does not run on the PR itself — it stays gated on push events only (D1). Merge it.
-- [ ] 8.2 [operator] On the resulting `release` push run, check: the OIDC login step succeeds against the replaced credential; the "Deploy with Helm" step visibly waits (measurable wall-clock time, not an instant return) and completes within the timeout; the job is green end to end; and task 3.5's diagnostics step shows as skipped, confirming it stays off on a successful run.
-- [ ] 8.3 [edit] Record the observations in `docs/`, including the measured deploy duration. If that measurement warrants it, replace D6's provisional `--timeout 10m` in `.github/workflows/ci.yml` with a value based on it.
+- [x] 8.1 [operator] Open a `main`-into-`release` pull request. Check: it shows CI checks (D2), and the `push` job does not run on the PR itself — it stays gated on push events only (D1). Merge it. Recorded: `docs/step10-evidence.md` Task 8.1.
+- [x] 8.2 [operator] On the resulting `release` push run, check: the OIDC login step succeeds against the replaced credential; the "Deploy with Helm" step visibly waits (measurable wall-clock time, not an instant return) and completes within the timeout; the job is green end to end; and task 3.5's diagnostics step shows as skipped, confirming it stays off on a successful run. Recorded, including the first attempt's expected D5 failure with no cluster raised: `docs/step10-evidence.md` Task 8.2.
+- [x] 8.3 [edit] Record the observations in `docs/`, including the measured deploy duration. If that measurement warrants it, replace D6's provisional `--timeout 10m` in `.github/workflows/ci.yml` with a value based on it. Recorded: `docs/step10-evidence.md` Task 8.2. The provisional `--timeout 10m` is kept, `ci.yml` unchanged: the one measured deploy (<HELM_DURATION>) sits well inside it, a single sample isn't enough to tighten it, and design.md D6 already names the value provisional rather than final.
 
 ## 9. Close Out
 
-- [ ] 9.1 [edit] Tick every task above with the evidence that closed it — a commit, a run link, or quoted command output — following the pattern the archived `step9-aks-deployment/tasks.md` uses.
-- [ ] 9.2 [operator] Once every task in Section 8 is checked off, archive this change: `openspec archive step10-release-branch-deploy`. After archiving, update the links to `openspec/changes/step10-release-branch-deploy/` in `docs/index.md` and `docs/plan.md` to point at the resulting archive path instead.
+- [x] 9.1 [edit] Tick every task above with the evidence that closed it — a commit, a run link, or quoted command output — following the pattern the archived `step9-aks-deployment/tasks.md` uses.
+- [x] 9.2 [operator] Once every task in Section 8 is checked off, archive this change: `openspec archive step10-release-branch-deploy`. After archiving, update the links to `openspec/changes/step10-release-branch-deploy/` in `docs/index.md` and `docs/plan.md` to point at the resulting archive path instead.

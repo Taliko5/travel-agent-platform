@@ -34,11 +34,13 @@ second apply:
 
 ```
 $ terraform -chdir=../platform apply \
+    -var="operator_object_id=$(az ad signed-in-user show --query id -o tsv)" \
     -var="aks_oidc_issuer_url=$(terraform output -raw oidc_issuer_url)"
 ```
 
-See `Infrastructure/terraform/platform/README.md` for the full three-step
-sequence this completes.
+`operator_object_id` must be passed on every platform apply, not just the
+first — see `Infrastructure/terraform/platform/README.md`. See that file too
+for the full three-step sequence this completes.
 
 ## Application routing add-on: two resources, not one
 
