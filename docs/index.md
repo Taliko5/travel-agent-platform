@@ -97,7 +97,7 @@ The numbers that matter for a cluster that only exists while it's being used: wh
 
 ## Deploying Without Long-Lived Credentials
 
-The pipeline (`.github/workflows/ci.yml`) runs on every push and pull request to `main`:
+The pipeline (`.github/workflows/ci.yml`) runs on every push and pull request to `main` and `release`:
 
 | Job | Runs when | What it does |
 |---|---|---|
@@ -107,7 +107,7 @@ The pipeline (`.github/workflows/ci.yml`) runs on every push and pull request to
 | `frontend` | Frontend changed | ESLint, Vitest, production build |
 | `build-backend` / `build-frontend` | After `test` / `frontend`, when that side changed | Builds the Docker image and scans it with Trivy (results are uploaded; findings don't fail the build yet — see Step 13) |
 | `chart-lint` | Helm chart changed | Renders the chart and client-side dry-run applies it to a throwaway `kind` cluster with the Gateway API and Secrets Store CSI CRDs installed |
-| `push` | Push to `main` only, after both build jobs | OIDC login to Azure, builds and pushes both images to ACR, then deploys to AKS with `helm upgrade --install` |
+| `push` | Push to `release` only, after both build jobs | OIDC login to Azure, builds and pushes both images to ACR, then deploys to AKS with `helm upgrade --install` |
 
 CI holds no long-lived Azure secrets at all. It authenticates via OIDC federation, requesting a short-lived token on each run to push to ACR and deploy to AKS.
 
@@ -119,7 +119,7 @@ resource "azurerm_federated_identity_credential" "ci" {
   audience = ["api://AzureADTokenExchange"]
   issuer   = "https://token.actions.githubusercontent.com"
   subject  = "repo:${var.github_repository}:ref:refs/heads/${var.ci_deploy_branch}"
-  # resolves to: repo:Taliko5/travel-agent-platform:ref:refs/heads/main
+  # resolves to: repo:Taliko5/travel-agent-platform:ref:refs/heads/release
   # …
 }
 ```
@@ -312,7 +312,7 @@ ResourceGroupNotFound
 ERROR: (AuthorizationFailed) The client '***' with object id '<ci-identity-principal-id>' does not have authorization to perform action 'Microsoft.ContainerService/managedClusters/listClusterUserCredential/action' over scope '/subscriptions/<subscription-id>/resourceGroups/travel-agent-cluster/providers/Microsoft.ContainerService/managedClusters/travel-agent' or the scope is invalid. If access was recently granted, please refresh your credentials.
 ```
 
-Full record: [Task 10.4](step9-raise-evidence.md#task-10-4). This is part of why [`docs/plan.md` Step 10](plan.md) proposes separating integration from deploy triggers.
+Full record: [Task 10.4](step9-raise-evidence.md#task-10-4). This is why [`docs/plan.md` Step 10](plan.md) separates integration from deploy triggers, implemented in [`openspec/changes/step10-release-branch-deploy/`](https://github.com/Taliko5/travel-agent-platform/blob/main/openspec/changes/step10-release-branch-deploy/proposal.md).
 
 ## Known Limitations / Next Steps
 

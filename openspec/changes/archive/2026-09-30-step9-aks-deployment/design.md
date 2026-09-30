@@ -261,6 +261,8 @@ Checked against Microsoft's own docs ([Use Azure RBAC for Kubernetes Authorizati
 
 **2026-09-21 (Section 11 closeout).** Still not revisited — CI continues to run as Cluster Admin.
 
+**2026-09-30 addendum.** The CI federated credential's trusted branch moves from `main` to `release`; the deploy gate this variable's description names changes accordingly. Decided in `step10-release-branch-deploy design.md` D3, which also replaces this section's `azurerm_federated_identity_credential.ci` resource (its name embeds the branch).
+
 ### D5 — `GOOGLE_API_KEY` comes from Azure Key Vault via the Secrets Store CSI driver, with the pod federated by Workload ID. The plain `secretKeyRef` does not survive (disposable)
 
 What exists today, from `Infrastructure/k8s/backend-deployment.yaml`:

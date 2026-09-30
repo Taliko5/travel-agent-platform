@@ -71,7 +71,7 @@ On `if: failure()`, a diagnostics step writes `kubectl get pods`, `kubectl get e
 
 ### D7 — Pin Helm and `kubelogin` versions instead of `latest`
 
-`ci.yml` currently installs `kubelogin` with `kubelogin-version: 'latest'` and Helm with no pin. Both become fixed versions, so flag behavior (`--wait`, `--timeout`) can't change underneath a later run with no corresponding commit to explain it. The version numbers themselves are not decided here — see Open Questions.
+`ci.yml` currently installs `kubelogin` with `kubelogin-version: 'latest'` and Helm with no pin. Both become fixed versions, so flag behavior (`--wait`, `--timeout`) can't change underneath a later run with no corresponding commit to explain it. `kubectl` is pinned too, since the diagnostics step (D6) runs it; its version follows the cluster's own pinned Kubernetes version rather than the Step 9 run's, because that run's log never recorded which `kubectl` version it actually installed — see `tasks.md` task 2.3.
 
 **Rejected: leave both unpinned.** Nothing requires the newest release of either tool.
 
@@ -104,7 +104,7 @@ Every command below is run by the operator; this states what to run and what to 
 
 ## Open Questions
 
-- **Pinned Helm and `kubelogin` versions (D7).** The plan was to read them from the successful deploy's "Set up Helm"/"Set up kubelogin" step logs, referenced in `docs/step9-raise-evidence.md`'s summary table as "Task 8.8" — but that file has no section logging those two steps' output, only a one-line summary of Task 8.8's outcome (RBAC Writer couldn't touch CRDs; CI widened to Cluster Admin). The version strings need to come from GitHub's own run log, not this file.
+- **Pinned Helm, `kubelogin`, and `kubectl` versions (D7) — resolved, see `tasks.md` task 2.3.** Helm and `kubelogin`'s versions were read from the successful deploy's own "Set up Helm"/"Set up kubelogin" step logs. `kubectl`'s could not be — its step log recorded only its inputs (`version: latest`), not what it actually installed — so `kubectl` is pinned instead to the cluster's own recorded Kubernetes version.
 - **The measured deploy duration (D6).** Not available until Migration Plan step 4 runs.
 - **Whether GitHub's ruleset UI offers "merge-commit method only" as a rule (D8).** Assumed available, not confirmed against the current editor.
 - **The `deployment` spec delta.** Depends on `step9-aks-deployment` being archived first, so its `deployment` capability exists in main specs to modify.

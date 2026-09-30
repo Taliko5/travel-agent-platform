@@ -1,7 +1,7 @@
 # deployment Specification
 
 ## Purpose
-TBD - created by archiving change step9-aks-deployment. Update Purpose after archive.
+Defines how the travel-agent stack reaches a running Kubernetes cluster and stays reachable there: what the cluster must provide, how secrets and configuration get to the workload, and how CI publishes and deploys without holding a long-lived credential.
 ## Requirements
 ### Requirement: Managed Kubernetes Target for This Iteration
 The deployed system SHALL run on a managed Kubernetes service in the owner's Azure subscription, with every resource it depends on created in a single region declared in the infrastructure definitions, and with the cluster raised on demand for a working session and destroyed at the end of it rather than left running.
