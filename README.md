@@ -97,7 +97,7 @@ Starts both services together: backend on `:8000`, frontend on `:3000`. Requires
 
 ## Deploying to Azure (Step 9)
 
-The app also runs on AKS (Azure Kubernetes Service), raised and torn down per working session rather than left running. **Before doing any of this, get the cost-approval go-ahead required by `openspec/changes/step9-aks-deployment/tasks.md` Section 7** — Section 8 there is the authoritative step ordering if anything below is ambiguous.
+The app also runs on AKS (Azure Kubernetes Service), raised and torn down per working session rather than left running. **Before doing any of this, get the cost-approval go-ahead required by `openspec/changes/archive/2026-09-30-step9-aks-deployment/tasks.md` Section 7** — Section 8 there is the authoritative step ordering if anything below is ambiguous.
 
 ### 1. Raise the cluster
 
@@ -105,7 +105,7 @@ The app also runs on AKS (Azure Kubernetes Service), raised and torn down per wo
 2. Set the `GOOGLE_API_KEY` secret value directly in Key Vault, out-of-band (not via Terraform) — same README covers this.
 3. Apply the cluster Terraform state (AKS cluster, node pool, Gateway) — see `Infrastructure/terraform/cluster/README.md`.
 4. Re-apply the platform state a second time, now passing the new cluster's OIDC issuer URL — this is what wires the backend's federated identity to the cluster just created. Covered in the same platform README.
-5. Deploy the Helm chart (`Infrastructure/helm/travel-agent/`), either by hand or via the CI pipeline's `push` job on a merge to `main`.
+5. Deploy the Helm chart (`Infrastructure/helm/travel-agent/`), either by hand or via the CI pipeline's `push` job on a merge into `release` (a pull request from `main`, merged with a merge commit) — see `openspec/changes/step10-release-branch-deploy/` for the flow.
 
 ### 2. Rotate `GOOGLE_API_KEY`
 
@@ -127,7 +127,7 @@ Needs the same `-var` flags as the apply step — see `Infrastructure/terraform/
 
 This destroys the **cluster** Terraform state only, and has no relationship to `docker-compose down -v` — the latter destroys `prometheus_data`, this repo's irreplaceable local observability history. Never confuse the two.
 
-What survives teardown, what doesn't, and the standing cost of what survives are all in `openspec/changes/step9-aks-deployment/design.md`'s D10 section and its resource inventory — see there for the specifics and figures.
+What survives teardown, what doesn't, and the standing cost of what survives are all in `openspec/changes/archive/2026-09-30-step9-aks-deployment/design.md`'s D10 section and its resource inventory — see there for the specifics and figures.
 
 ## Testing, Linting & Formatting
 
@@ -209,7 +209,7 @@ This project was built with AI assistance (Claude Code and Claude Desktop), usin
 
 Two examples of decisions I made:
 
-- **Deploy only through CI.** Helm releases go out from the GitHub Actions `push` job over OIDC, never from my own machine, so whatever runs in the cluster always corresponds to a commit. That choice is also what exposed a least-privilege gap: creating the chart's CRD objects (`Gateway`, `HTTPRoute`, `SecretProviderClass`) needs a role no built-in Azure role below Cluster Admin provides. I accepted Cluster Admin for CI as a documented, temporary deviation rather than falling back to manual deploys.
+- **Deploy only through CI.** Helm releases go out from the GitHub Actions `push` job over OIDC, never from my own machine, so whatever runs in the cluster always corresponds to a commit. That job now runs only on a merge into `release`, so `main` stays green while no cluster is raised. That choice is also what exposed a least-privilege gap: creating the chart's CRD objects (`Gateway`, `HTTPRoute`, `SecretProviderClass`) needs a role no built-in Azure role below Cluster Admin provides. I accepted Cluster Admin for CI as a documented, temporary deviation rather than falling back to manual deploys.
 - **Mock MCP servers first.** Commercial flight and hotel APIs are paid, so the flight and hotel MCP servers start with mock data, while weather uses the free Open-Meteo API live. Each tool lives in its own MCP server module behind a fixed function signature, so replacing a mock with a real API later is a change inside that one module, not to the agent graph.
 
 ## Documentation Map
@@ -235,7 +235,7 @@ In short: `CLAUDE.md` tells the agent how to work in the repo *right now*, `docs
 - [x] Step 7: GitHub Actions CI/CD
 - [x] Step 8: Observability (Grafana, Prometheus, OpenTelemetry)
 - [x] Step 9: Azure deployment (AKS)
-- [ ] Step 10: CI branch separation + browser-triggered cluster launch
+- [ ] Step 10: CI branch separation + browser-triggered cluster launch — main/release split done, browser-triggered launch not
 - [ ] Step 11: Private networking — VNet, private endpoints, Private DNS, TLS
 - [ ] Step 12: IaC quality gates + remote Terraform state
 - [ ] Step 13: Container image and Helm chart hardening
